@@ -1,0 +1,29 @@
+# The 256-token grading row widened by +-3 chunks, generated from the selection the
+# grader already made in grading_256.yaml rather than grading again.
+#
+# Grading is deterministic at temperature 0 and its result is recorded per passage, so
+# re-running it would spend ~3000 LLM calls to rebuild a selection we hold. The context
+# is prepared offline by scripts/expand_context.py from that run's answers file, whose
+# sources carry their corpus chunk_id, and replayed here: the generator sees exactly
+# what the full pipeline would have built. The row's real cost stays ~21 calls per
+# question (20 grading + 1 generation), of which only the generation is spent here.
+#
+#   uv run python -m src.workflow.runner --config configs/workflow/grading_256_pm3_replayed.yaml
+name: grading_pm3
+chunks_path: data/processed/docling/chunked/hybrid/chunks_256.jsonl
+collection_name: docling_hybrid_256_bge-m3
+retriever: replay
+replay_path: data/processed/prompts/expanded/workflow_grading_replay_docling_hybrid_256_bge-m3_ollama_chat_granite4.1:8b_k20_12kc_pm3.jsonl
+doc_scoped: true
+k: 200   # the whole expanded context; the trim to num_ctx decides what survives
+grading:
+  enabled: false   # replayed from grading_256.yaml, see above
+expansion:
+  enabled: false   # already applied offline
+calculator:
+  enabled: false
+llm:
+  model: ollama_chat/granite4.1:8b
+  temperature: 0.0
+  max_tokens: 1024
+  num_ctx: 12288

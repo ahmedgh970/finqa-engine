@@ -1,0 +1,11 @@
+# Retrieval eval of what the generator actually read on the 256-token grading row
+# widened by +-3 chunks: the replay reads the workflow's answers file, whose sources are
+# the expanded context after the trim to num_ctx 12288. Kept contexts can hold well over
+# 20 passages, so @100 scores the whole of it.
+# make eval-retrieval CONFIG=configs/evaluation/retrieval/chunks256_grading_pm3_12kc.yaml
+chunks_path: data/processed/docling/chunked/hybrid/chunks_256.jsonl
+collection_name: docling_hybrid_256_bge-m3
+retriever: replay
+replay_path: data/processed/answers/workflow/workflow_grading_pm3_replay_docling_hybrid_256_bge-m3_ollama_chat_granite4.1:8b_k200_12kc.jsonl
+doc_scoped: true
+k_values: [5, 10, 20, 100]

@@ -1,0 +1,32 @@
+# Select small, read wide: the 256-token grading row, each kept passage widened to the
+# 3 chunks on either side of it in its document (the expansion node, no LLM call).
+#
+# The conservative window of the pair: measured offline on the graded contexts of
+# grading_256.yaml, it holds 0.709 of the evidence numbers and every number of 40% of
+# the questions in ~5.7K tokens of context, against 0.467 / 22% without expansion. Only
+# 27 of the 150 are trimmed back by _fit_context at num_ctx 12288, against 75 for the
+# wider grading_256_pm6.yaml, so what the generator reads is close to the window it
+# names.
+#
+#   uv run python -m src.workflow.runner --config configs/workflow/grading_256_pm3.yaml
+chunks_path: data/processed/docling/chunked/hybrid/chunks_256.jsonl
+collection_name: docling_hybrid_256_bge-m3
+retriever: replay
+replay_path: data/processed/prompts/prompts_reranked-dense_docling_hybrid_256_bge-m3_docscoped_pf50_k20.jsonl
+doc_scoped: true
+k: 20
+grading:
+  enabled: true
+  keep_threshold: 2
+  min_chunks: 3
+  low_confidence_below: 2
+expansion:
+  enabled: true
+  window: 3   # chunks on each side of every kept passage
+calculator:
+  enabled: false
+llm:
+  model: ollama_chat/granite4.1:8b
+  temperature: 0.0
+  max_tokens: 1024
+  num_ctx: 12288

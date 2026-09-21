@@ -1,0 +1,24 @@
+# Baseline of the 256-token corpus: the stored reranked(dense, prefetch 50) top-20,
+# read as retrieved. No grader, no expansion, one LLM call -- the row every selection
+# strategy on this corpus has to beat, the counterpart of advanced.yaml on 1024.
+#
+# Its 20 passages are ~4.3K tokens, so nothing is trimmed at num_ctx 12288.
+#
+#   uv run python -m src.workflow.runner --config configs/workflow/advanced_256.yaml
+chunks_path: data/processed/docling/chunked/hybrid/chunks_256.jsonl
+collection_name: docling_hybrid_256_bge-m3
+retriever: replay
+replay_path: data/processed/prompts/prompts_reranked-dense_docling_hybrid_256_bge-m3_docscoped_pf50_k20.jsonl
+doc_scoped: true
+k: 20
+grading:
+  enabled: false
+expansion:
+  enabled: false
+calculator:
+  enabled: false
+llm:
+  model: ollama_chat/granite4.1:8b
+  temperature: 0.0
+  max_tokens: 1024
+  num_ctx: 12288
