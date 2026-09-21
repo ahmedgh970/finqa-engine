@@ -33,6 +33,10 @@ class RetrievalEvalConfig(BaseModel):
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     rerank_prefetch: int = 50  # candidates pulled from base_retriever before rerank
 
+    # Only used when retriever == "replay": the materialised retrieval to score, which
+    # caps k_values at the depth it was stored with and needs neither GPU nor Qdrant.
+    replay_path: str | None = None
+
 
 def load_retrieval_eval_config(path: str) -> RetrievalEvalConfig:
     """Load and validate a retrieval-evaluation config from a YAML file."""

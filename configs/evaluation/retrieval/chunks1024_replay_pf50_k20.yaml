@@ -1,0 +1,11 @@
+# Retrieval eval of the materialised reranked(dense, prefetch 50) top-20, doc-scoped,
+# on the docling-hybrid-1024 corpus -- the exact passages every workflow row is served.
+# Scored from the stored file, so no embedder, no cross-encoder, no Qdrant: k_values are
+# capped at the depth it was stored with (20).
+# make eval-retrieval CONFIG=configs/evaluation/retrieval/chunks1024_replay_pf50_k20.yaml
+chunks_path: data/processed/docling/chunked/hybrid/chunks_1024.jsonl
+collection_name: docling_hybrid_1024_bge-m3
+retriever: replay
+replay_path: data/processed/prompts/prompts_reranked-dense_docling_hybrid_1024_bge-m3_docscoped_pf50_k20.jsonl
+doc_scoped: true
+k_values: [1, 3, 5, 10, 20]

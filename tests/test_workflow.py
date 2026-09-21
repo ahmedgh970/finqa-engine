@@ -1,4 +1,4 @@
-"""Fast unit tests for the deterministic CRAG workflow (no GPU, no LLM, no Qdrant)."""
+"""Fast unit tests for the deterministic advanced RAG workflow (no GPU, no LLM, no Qdrant)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import pytest
 from src.ingestion.schema import Chunk
 from src.retrieval.base import ScoredChunk
 from src.workflow.config import WorkflowConfig, load_workflow_config, variant_name
+from src.workflow.expansion import expand
 from src.workflow.graph import answer_workflow
 
 
@@ -58,15 +59,15 @@ def test_variant_name_covers_the_ablation_matrix():
     assert variant_name(_config(calculator={"enabled": True})) == "calc"
     assert (
         variant_name(_config(grading={"enabled": True}, calculator={"enabled": True}))
-        == "crag_full"
+        == "grading_calc"
     )
 
 
 def test_shipped_configs_share_one_retrieval_and_differ_by_one_switch():
     """Attribution rests on this: the rows must differ by the node under test alone."""
     rows = {
-        name: load_workflow_config(f"configs/workflow/{name}.yaml")
-        for name in ("advanced", "grading")
+        name: load_workflow_config(f"configs/workflow/{file}.yaml")
+        for name, file in (("advanced", "advanced"), ("grading", "grading_1024"))
     }
     # Same retrieval, replayed from the same file, so passages are byte-identical.
     assert {c.retriever for c in rows.values()} == {"replay"}
@@ -239,3 +240,97 @@ def test_output_file_names_the_pinned_context_window():
     assert runner_mod._output_path(pinned).name == f"{stem}_12kc.jsonl"
     odd = cfg.model_copy(update={"llm": cfg.llm.model_copy(update={"num_ctx": 10000})})
     assert runner_mod._output_path(odd).name == f"{stem}_10000c.jsonl"
+
+
+def test_the_chunk_size_row_differs_from_the_grading_row_by_its_corpus_alone():
+    base = load_workflow_config("configs/workflow/grading_1024.yaml").model_dump()
+    small = load_workflow_config("configs/workflow/grading_256.yaml").model_dump()
+    corpus = {"chunks_path", "collection_name", "replay_path"}
+    assert {k for k in base if base[k] != small[k]} == corpus
+    assert "256" in small["collection_name"] and "256" in small["replay_path"]
+
+
+def _corpus_chunk(doc: str, index: int, text: str) -> Chunk:
+    return Chunk(chunk_id=f"{doc}::{index}", doc_id=doc, page=1, text=text)
+
+
+def test_expansion_reads_the_neighbourhood_of_every_selected_passage():
+    corpus = {c.chunk_id: c for c in (_corpus_chunk("D", i, f"t{i}") for i in range(6))}
+    widened = expand([corpus["D::3"]], corpus, window=1)
+    assert [c.chunk_id for c in widened] == ["D::2", "D::3", "D::4"]
+
+
+def test_expansion_merges_adjacent_selections_instead_of_repeating_them():
+    corpus = {c.chunk_id: c for c in (_corpus_chunk("D", i, f"t{i}") for i in range(6))}
+    widened = expand([corpus["D::2"], corpus["D::3"]], corpus, window=1)
+    assert [c.chunk_id for c in widened] == ["D::1", "D::2", "D::3", "D::4"]
+
+
+def test_expansion_stays_inside_the_document_and_ignores_idless_passages():
+    corpus = {c.chunk_id: c for c in (_corpus_chunk("D", i, f"t{i}") for i in range(2))}
+    assert [c.chunk_id for c in expand([corpus["D::0"]], corpus, window=3)] == ["D::0", "D::1"]
+    stray = Chunk(chunk_id="question::0", doc_id="D", page=1, text="t")
+    assert expand([stray], corpus, window=3) == [stray]
+
+
+def test_a_window_of_zero_leaves_the_selection_untouched():
+    corpus = {c.chunk_id: c for c in (_corpus_chunk("D", i, f"t{i}") for i in range(3))}
+    assert expand([corpus["D::1"]], corpus, window=0) == [corpus["D::1"]]
+
+
+def test_the_expansion_node_widens_what_the_generator_reads(monkeypatch, tmp_path):
+    """The window must reach the prompt, not just the state."""
+    chunks_path = tmp_path / "chunks.jsonl"
+    chunks_path.write_text(
+        "".join(
+            json.dumps(
+                {
+                    "chunk_id": f"DOC_2022_10K::{i}",
+                    "doc_id": "DOC_2022_10K",
+                    "page": 1,
+                    "text": f"passage {i}",
+                }
+            )
+            + "\n"
+            for i in range(4)
+        ),
+        encoding="utf-8",
+    )
+    captured: dict[str, str] = {}
+    monkeypatch.setattr(
+        "src.workflow.nodes.generate",
+        lambda prompt, config: captured.setdefault("prompt", prompt) and "" or "answer",
+    )
+    config = _config(
+        k=1,
+        chunks_path=str(chunks_path),
+        expansion={"enabled": True, "window": 1},
+    )
+    retriever = FakeRetriever(
+        [
+            Chunk(chunk_id=f"DOC_2022_10K::{i}", doc_id="DOC_2022_10K", page=1, text=f"passage {i}")
+            for i in range(4)
+        ][1:]
+    )
+    result = answer_workflow("What was capex?", retriever, config, doc_id="DOC_2022_10K")
+
+    assert [c.chunk_id for c in result.sources] == [
+        "DOC_2022_10K::0",
+        "DOC_2022_10K::1",
+        "DOC_2022_10K::2",
+    ]
+    assert result.n_expanded == 3 and result.llm_calls == 1
+    assert "passage 0" in captured["prompt"] and "passage 2" in captured["prompt"]
+
+
+def test_the_expansion_window_names_the_ablation_cell():
+    assert variant_name(_config(grading={"enabled": True})) == "grading"
+    widened = _config(grading={"enabled": True}, expansion={"enabled": True, "window": 6})
+    assert variant_name(widened) == "grading_pm6"
+
+
+def test_an_explicit_name_files_a_replayed_selection_under_its_own_cell():
+    """A row whose grading was computed elsewhere must not be filed as the baseline."""
+    replayed = _config(name="grading_pm6")
+    assert variant_name(replayed) == "grading_pm6"
+    assert variant_name(_config()) == "advanced"

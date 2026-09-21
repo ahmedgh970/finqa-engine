@@ -3,7 +3,8 @@
 from pathlib import Path
 
 from src.evaluation.retrieval.config import load_retrieval_eval_config
-from src.evaluation.retrieval.evaluate import aggregate, dedup_relevances, score_qa
+from src.evaluation.retrieval.coverage import evidence_coverage, numbers
+from src.evaluation.retrieval.evaluate import aggregate, coverage_qa, dedup_relevances, score_qa
 from src.evaluation.run_retrieval import report_path
 from src.ingestion.schema import Chunk
 from src.retrieval.base import ScoredChunk
@@ -43,6 +44,40 @@ def test_aggregate_averages_over_the_evaluated_qas():
     assert aggregate([]) == {}
 
 
+def test_aggregate_leaves_inapplicable_values_out_of_the_mean():
+    per_qa = [{"evidence_numbers@5": 1.0}, {"evidence_numbers@5": None}]
+    assert aggregate(per_qa) == {"evidence_numbers@5": 1.0}
+
+
+def test_numbers_drop_thousands_separators_and_sentence_dots():
+    assert numbers("Revenue was $1,234.5 million in 2019.") == {"1234.5", "2019"}
+
+
+def test_evidence_coverage_reads_the_figures_not_the_page():
+    evidence = ["Accounts payable 2019 = 292. Accounts payable 2018 = 253."]
+    half = evidence_coverage("Accounts payable 2019 = 292.", evidence)
+    assert half["evidence_numbers"] == 0.5  # 2019 and 292, not 2018 and 253
+    assert half["all_evidence_numbers"] == 0.0
+    full = evidence_coverage(evidence[0], evidence)
+    assert full["evidence_numbers"] == full["all_evidence_numbers"] == 1.0
+
+
+def test_evidence_without_numbers_does_not_count_as_covered():
+    cov = evidence_coverage("anything", ["Revenue grew on higher volumes"])
+    assert cov["evidence_numbers"] is None and cov["all_evidence_numbers"] is None
+
+
+def test_coverage_at_k_reads_only_the_top_k_passages():
+    results = [
+        ScoredChunk(Chunk(chunk_id=f"D::{i}", doc_id="D", page=1, text=t), 1.0)
+        for i, t in enumerate(["cash 100", "debt 200"])
+    ]
+    cov = coverage_qa(results, ["cash 100 debt 200"], [1, 5])
+    assert cov["evidence_numbers@1"] == 0.5
+    assert cov["evidence_numbers@5"] == 1.0
+    assert cov["passages@1"] == 1.0 and cov["passages@5"] == 2.0
+
+
 def test_report_is_named_after_the_config():
     path = report_path("configs/evaluation/retrieval/chunks512_dense.yaml", "20260911-120000")
     assert path == Path("docs/benchmarks/retrieval_chunks512_dense_20260911-120000.json")
@@ -50,7 +85,7 @@ def test_report_is_named_after_the_config():
 
 def test_every_shipped_retrieval_config_loads():
     configs = sorted(Path("configs/evaluation/retrieval").glob("*.yaml"))
-    assert len(configs) == 6
+    assert len(configs) == 13
     for path in configs:
         cfg = load_retrieval_eval_config(str(path))
         assert cfg.doc_scoped

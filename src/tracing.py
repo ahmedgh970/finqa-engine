@@ -1,13 +1,13 @@
-"""Optional local tracing of the agent via Arize Phoenix (OpenTelemetry).
+"""Optional local tracing via Arize Phoenix (OpenTelemetry), shared by the runners.
 
-Off by default. Call :func:`setup_tracing` once per process (e.g. from the agent
-runner when tracing is requested) to export every LangGraph / LangChain span --
-the agent loop, each LLM call, each ``retrieve`` / ``calculator`` tool call -- to
-a local Phoenix collector (the docker-compose ``phoenix`` service, UI at
+Off by default. A runner calls :func:`setup_tracing` once per process when tracing
+is requested, under its own project name, to export every LangGraph / LangChain
+span -- the workflow nodes or the agent loop, each LLM call, each tool call -- to a
+local Phoenix collector (the docker-compose ``phoenix`` service, UI at
 http://localhost:6006). No account, no keys: everything stays on the machine.
 
 Instrumentation is global (it patches LangChain for the whole process), so this is
-a one-shot setup, not a per-call wrapper -- ``answer_agentic`` needs no change.
+a one-shot setup, not a per-call wrapper: the traced code needs no change.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ _started = False
 
 
 def setup_tracing(
-    project_name: str = "financerag-agent",
+    project_name: str,
     endpoint: str | None = None,
     batch: bool = False,
 ) -> None:

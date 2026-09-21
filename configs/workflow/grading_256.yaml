@@ -1,0 +1,28 @@
+# Chunk-size ablation of the grading row: the same reranked(dense, prefetch 50) top-20,
+# graded 0-3 with the same threshold, floor and context window, on the 256-token corpus.
+#
+# Only the corpus and the replayed file differ from grading_1024.yaml, so a difference
+# between the two rows is the chunk size alone. The replayed file stores each
+# passage's corpus chunk_id, and the answers file keeps it for the passages the grader
+# kept, so the kept context can be scored by the retrieval eval (replay_path pointing
+# at the answers file) and later extended to its neighbouring chunks.
+#
+#   uv run python -m src.workflow.runner --config configs/workflow/grading_256.yaml
+chunks_path: data/processed/docling/chunked/hybrid/chunks_256.jsonl
+collection_name: docling_hybrid_256_bge-m3
+retriever: replay
+replay_path: data/processed/prompts/prompts_reranked-dense_docling_hybrid_256_bge-m3_docscoped_pf50_k20.jsonl
+doc_scoped: true
+k: 20
+grading:
+  enabled: true
+  keep_threshold: 2   # UMBRELA: 2 = holds part of what the answer is built from
+  min_chunks: 3       # 0 = no floor, 1 = rescue an empty selection only, 3 = always three
+  low_confidence_below: 2
+calculator:
+  enabled: false
+llm:
+  model: ollama_chat/granite4.1:8b
+  temperature: 0.0
+  max_tokens: 1024
+  num_ctx: 12288

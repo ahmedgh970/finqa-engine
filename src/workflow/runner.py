@@ -1,4 +1,4 @@
-"""CLI runner: answer every FinanceBench QA with the deterministic CRAG workflow.
+"""CLI runner: answer every FinanceBench QA with the deterministic advanced RAG workflow.
 
 Builds the retriever once, runs the configured graph per QA, and writes answer +
 sources + the workflow instrumentation (rewrite rounds, calculator trigger,
@@ -22,10 +22,10 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from src.agents.tracing import setup_tracing
 from src.evaluation.common.golden_set import load_golden_set
 from src.evaluation.common.schema import QAItem
 from src.retrieval.registry import build_retriever
+from src.tracing import setup_tracing
 from src.workflow.config import WorkflowConfig, load_workflow_config, variant_name
 from src.workflow.graph import answer_workflow
 
@@ -113,13 +113,15 @@ def run(
                 "gold_answer": qa.answer,
                 "generated_answer": result.answer,
                 "sources": [
-                    {"doc_id": c.doc_id, "page": c.page, "text": c.text} for c in result.sources
+                    {"chunk_id": c.chunk_id, "doc_id": c.doc_id, "page": c.page, "text": c.text}
+                    for c in result.sources
                 ],
                 "latency_s": result.latency_s,
                 "n_retrieved": result.n_retrieved,
                 "n_kept_by_grade": result.n_kept_by_grade,
                 "n_kept_by_floor": result.n_kept_by_floor,
                 "n_dropped_to_fit": result.n_dropped_to_fit,
+                "n_expanded": result.n_expanded,
                 "grades": result.grades,
                 "max_grade": result.max_grade,
                 "low_confidence": result.low_confidence,
@@ -135,7 +137,7 @@ def run(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Answer FinanceBench QA with the deterministic CRAG workflow."
+        description="Answer FinanceBench QA with the deterministic advanced RAG workflow."
     )
     parser.add_argument("--config", required=True, help="Path to a workflow YAML config.")
     parser.add_argument("--id", help="Answer only this QA id, skipping the rest.")

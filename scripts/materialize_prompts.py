@@ -12,12 +12,16 @@ at max(k) per question and slice -- identical results, a third of the retrieval.
 Output: one JSONL per k at data/processed/prompts/prompts_k{k}.jsonl, each line
 carrying everything downstream needs (generation, judge, Ragas):
     {id, question, gold_answer, doc_name, k, n_chunks,
-     sources: [{doc_id, page, text}], prompt}
+     sources: [{chunk_id, doc_id, page, text}], prompt}
+
+``chunk_id`` identifies the passage in its corpus, so a later experiment can pull
+its neighbours from the chunks file without re-running the retriever.
 
 Resumable: a (question, k) already written is skipped.
 
     uv run python scripts/materialize_prompts.py
-    uv run python scripts/materialize_prompts.py --limit 5   # smoke test
+    uv run python scripts/materialize_prompts.py --limit 5        # smoke test
+    uv run python scripts/materialize_prompts.py --chunk-size 512 --ks 20
 """
 
 from __future__ import annotations
@@ -34,14 +38,13 @@ from src.rag.config import RagConfig
 from src.retrieval.registry import build_retriever
 
 KS = [5, 10, 20]
+CHUNK_SIZE = 1024  # token budget of the corpus to materialize from
 OUT_DIR = Path("data/processed/prompts")
 
 # Retriever setup, hard-coded on purpose (no external YAML): the materialized
-# prompts have one canonical setup -- the reference retriever reranked(dense)
-# on the 1024-token corpus, doc-scoped, same as `make answer`. Only the
-# retrieval fields matter here; nothing generates, so no LLM is involved.
-COLLECTION = "docling_hybrid_1024_bge-m3"
-CHUNKS_PATH = "data/processed/docling/chunked/hybrid/chunks_1024.jsonl"
+# prompts have one canonical setup -- the reference retriever reranked(dense),
+# doc-scoped, same as `make answer`. Only the chunk size varies, so a chunk-size
+# ablation replays like any other row. Nothing generates, so no LLM is involved.
 RETRIEVER = "reranked"
 BASE_RETRIEVER = "dense"
 DOC_SCOPED = True
@@ -49,10 +52,20 @@ PREFETCH = 50  # reference value (ADR 0001); must match `make answer` -- a small
 # pool would rerank fewer candidates and change which top-k chunks come out.
 
 
-def _out_path(k: int) -> Path:
+def _collection(chunk_size: int) -> str:
+    return f"docling_hybrid_{chunk_size}_bge-m3"
+
+
+def _chunks_path(chunk_size: int) -> str:
+    return f"data/processed/docling/chunked/hybrid/chunks_{chunk_size}.jsonl"
+
+
+def _out_path(k: int, chunk_size: int) -> Path:
     """Self-documenting filename encoding the retrieval setup (like the answers files)."""
     scope = "docscoped" if DOC_SCOPED else "global"
-    stem = f"prompts_{RETRIEVER}-{BASE_RETRIEVER}_{COLLECTION}_{scope}_pf{PREFETCH}_k{k}"
+    stem = (
+        f"prompts_{RETRIEVER}-{BASE_RETRIEVER}_{_collection(chunk_size)}_{scope}_pf{PREFETCH}_k{k}"
+    )
     return OUT_DIR / f"{stem}.jsonl"
 
 
@@ -63,10 +76,13 @@ def _done_ids(path: Path) -> set[str]:
         return {json.loads(line)["id"] for line in f if line.strip()}
 
 
-def run(limit: int | None = None) -> None:
+def run(
+    limit: int | None = None, chunk_size: int = CHUNK_SIZE, ks: list[int] | None = None
+) -> None:
+    ks = ks or KS
     cfg = RagConfig(
-        chunks_path=CHUNKS_PATH,
-        collection_name=COLLECTION,
+        chunks_path=_chunks_path(chunk_size),
+        collection_name=_collection(chunk_size),
         retriever=RETRIEVER,
         base_retriever=BASE_RETRIEVER,
         doc_scoped=DOC_SCOPED,
@@ -77,19 +93,19 @@ def run(limit: int | None = None) -> None:
         qas = qas[:limit]
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    files = {k: _out_path(k).open("a", encoding="utf-8") for k in KS}
-    done = {k: _done_ids(_out_path(k)) for k in KS}
+    files = {k: _out_path(k, chunk_size).open("a", encoding="utf-8") for k in ks}
+    done = {k: _done_ids(_out_path(k, chunk_size)) for k in ks}
 
     retriever = build_retriever(cfg.retriever, cfg)
-    written = {k: 0 for k in KS}
+    written = {k: 0 for k in ks}
 
     for qa in tqdm(qas, desc="materialize"):
-        missing = [k for k in KS if qa.id not in done[k]]
+        missing = [k for k in ks if qa.id not in done[k]]
         if not missing:
             continue
         # retrieve once at the largest k; the smaller k are prefixes of this order
         top = retriever.retrieve(
-            qa.question, k=max(KS), doc_id=qa.doc_name if cfg.doc_scoped else None
+            qa.question, k=max(ks), doc_id=qa.doc_name if cfg.doc_scoped else None
         )
         for k in missing:
             chunks = [sc.chunk for sc in top[:k]]
@@ -100,7 +116,15 @@ def run(limit: int | None = None) -> None:
                 "doc_name": qa.doc_name,
                 "k": k,
                 "n_chunks": len(chunks),
-                "sources": [{"doc_id": c.doc_id, "page": c.page, "text": c.text} for c in chunks],
+                "sources": [
+                    {
+                        "chunk_id": c.chunk_id,
+                        "doc_id": c.doc_id,
+                        "page": c.page,
+                        "text": c.text,
+                    }
+                    for c in chunks
+                ],
                 "prompt": build_prompt(qa.question, chunks),
             }
             files[k].write(json.dumps(record) + "\n")
@@ -109,8 +133,8 @@ def run(limit: int | None = None) -> None:
 
     for f in files.values():
         f.close()
-    summary = " | ".join(f"k{k}: +{written[k]} (skipped {len(done[k])})" for k in KS)
-    print(f"materialized prompts -> {OUT_DIR}/\n  {summary}")
+    summary = " | ".join(f"k{k}: +{written[k]} (skipped {len(done[k])})" for k in ks)
+    print(f"materialized prompts ({chunk_size}-token chunks) -> {OUT_DIR}/\n  {summary}")
 
 
 def main() -> None:
@@ -118,8 +142,18 @@ def main() -> None:
         description="Pre-materialize generation prompts per question × k."
     )
     parser.add_argument("--limit", type=int, help="Only the first N questions (smoke test).")
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=CHUNK_SIZE,
+        choices=[256, 512, 1024],
+        help="Token budget of the corpus to retrieve from (its collection must be indexed).",
+    )
+    parser.add_argument(
+        "--ks", type=int, nargs="+", default=KS, help="Depths to materialize (default 5 10 20)."
+    )
     args = parser.parse_args()
-    run(limit=args.limit)
+    run(limit=args.limit, chunk_size=args.chunk_size, ks=args.ks)
 
 
 if __name__ == "__main__":

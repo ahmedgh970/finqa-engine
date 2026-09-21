@@ -34,9 +34,11 @@ class ReplayRetriever:
             record = json.loads(line)
             self._by_question[record["question"]] = [
                 Chunk(
-                    # The stored sources carry no id; position in the stored ranking is
-                    # a stable one, and the floor only needs it to avoid duplicates.
-                    chunk_id=f"{record['id']}::{i}",
+                    # The corpus id when the file stored it, so a passage can be traced
+                    # back to its neighbours; older files carry none, and position in
+                    # the stored ranking is then a stable stand-in (the floor only needs
+                    # it to avoid duplicates).
+                    chunk_id=source.get("chunk_id") or f"{record['id']}::{i}",
                     doc_id=source["doc_id"],
                     page=source["page"],
                     text=source["text"],

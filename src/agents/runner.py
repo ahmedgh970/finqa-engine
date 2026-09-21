@@ -22,10 +22,10 @@ from tqdm import tqdm
 
 from src.agents.agent_rag import answer_agentic
 from src.agents.config import AgentConfig, load_agent_config
-from src.agents.tracing import setup_tracing
 from src.evaluation.common.golden_set import load_golden_set
 from src.evaluation.common.schema import QAItem
 from src.retrieval.registry import build_retriever
+from src.tracing import setup_tracing
 
 
 def _answered_ids(path: Path) -> set[str]:
@@ -70,7 +70,7 @@ def run(
 ) -> str:
     """Answer every not-yet-answered QA (or just ``qa_id``) and append results to a JSONL."""
     if trace:
-        setup_tracing()
+        setup_tracing(project_name="financerag-agent")
 
     qas = _select(load_golden_set(config.golden_set_path), qa_id)
     if limit is not None:

@@ -1,0 +1,11 @@
+# Retrieval eval of the context the grader kept (workflow grading row, 1024-token corpus,
+# num_ctx 12288): the replay reads the workflow's answers file, whose sources are the
+# passages that reached the generator after grading, the floor and the fit to the
+# context window. Kept contexts hold at most 20 passages, so @20 scores the whole of it.
+# make eval-retrieval CONFIG=configs/evaluation/retrieval/chunks1024_grading_12kc.yaml
+chunks_path: data/processed/docling/chunked/hybrid/chunks_1024.jsonl
+collection_name: docling_hybrid_1024_bge-m3
+retriever: replay
+replay_path: data/processed/answers/workflow/workflow_grading_replay_docling_hybrid_1024_bge-m3_ollama_chat_granite4.1:8b_k20_12kc.jsonl
+doc_scoped: true
+k_values: [1, 3, 5, 10, 20]

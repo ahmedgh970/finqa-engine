@@ -1,4 +1,4 @@
-"""State carried through the CRAG graph.
+"""State carried through the advanced RAG graph.
 
 One flat TypedDict rather than nested objects: LangGraph merges the partial dict a
 node returns into the state, so a flat shape keeps every node's contract obvious.
@@ -32,6 +32,9 @@ class CragState(TypedDict, total=False):
     n_kept_by_floor: int  # added by the floor to reach min_chunks
     max_grade: int
     low_confidence: bool  # recorded, never acted upon
+
+    # Neighbourhood expansion
+    expanded: list[Chunk]  # the selection widened to the chunks around each passage
 
     # Numeric path
     is_numeric: bool

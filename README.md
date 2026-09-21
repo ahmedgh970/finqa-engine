@@ -1,7 +1,7 @@
 # FinQA Engine — Production-ready agentic RAG for financial document Q&A
 
-[![CI](https://github.com/ahmedgh970/finqa-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmedgh970/finqa-engine/actions/workflows/ci.yml) [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![License: MIT](https://img.shields.io/github/license/ahmedgh970/finqa-engine)](LICENSE) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)<br>
-[![Orchestration: LangGraph](https://img.shields.io/badge/orchestration-LangGraph-1C3C3C?logo=langgraph&logoColor=white)](https://github.com/langchain-ai/langgraph) [![Framework: LangChain](https://img.shields.io/badge/framework-LangChain-1C3C3C?logo=langchain&logoColor=white)](https://github.com/langchain-ai/langchain) [![Vector DB: Qdrant](https://img.shields.io/badge/vector%20DB-Qdrant-4338CA?logo=qdrant&logoColor=white)](https://qdrant.tech/) [![Serving: FastAPI](https://img.shields.io/badge/serving-FastAPI-0F766E?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/) [![Local LLMs: Ollama](https://img.shields.io/badge/local%20LLMs-Ollama-0F766E?logo=ollama&logoColor=white)](https://ollama.com/) [![Parsing: Docling](https://img.shields.io/badge/parsing-Docling-4338CA)](https://github.com/docling-project/docling) [![Dataset: FinanceBench](https://img.shields.io/badge/dataset-FinanceBench-B45309)](https://github.com/patronus-ai/financebench)
+[![CI](https://github.com/ahmedgh970/finqa-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmedgh970/finqa-engine/actions/workflows/ci.yml) [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![License: MIT](https://img.shields.io/github/license/ahmedgh970/finqa-engine)](LICENSE) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv) [![Dataset: FinanceBench](https://img.shields.io/badge/dataset-FinanceBench-B45309)](https://github.com/patronus-ai/financebench) [![Vector DB: Qdrant](https://img.shields.io/badge/vector%20DB-Qdrant-4338CA?logo=qdrant&logoColor=white)](https://qdrant.tech/)   [![Parsing: Docling](https://img.shields.io/badge/parsing-Docling-4338CA)](https://github.com/docling-project/docling) <br>
+[![Orchestration: LangGraph](https://img.shields.io/badge/orchestration-LangGraph-1C3C3C?logo=langgraph&logoColor=white)](https://github.com/langchain-ai/langgraph) [![Framework: LangChain](https://img.shields.io/badge/framework-LangChain-1C3C3C?logo=langchain&logoColor=white)](https://github.com/langchain-ai/langchain) [![Local LLMs: Ollama](https://img.shields.io/badge/local%20LLMs-Ollama-0F766E?logo=ollama&logoColor=white)](https://ollama.com/) [![Serving: FastAPI](https://img.shields.io/badge/serving-FastAPI-0F766E?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 
 > End-to-end RAG & Agentic RAG benchmark on [FinanceBench](https://github.com/patronus-ai/financebench); 150 financial QA pairs, 368 SEC filings (10-K/10-Q).
 > From naive retrieval to multi-agent system, every improvement is justified by a number.
@@ -14,7 +14,7 @@ FinanceBench shows that state-of-the-art RAG systems fail on ~80% of financial q
 
 **What this repo demonstrates:**
 - Reproducible evaluation pipeline (retrieval metrics + LLM judge + Ragas)
-- Progression: naive RAG → hybrid search + reranking → agentic RAG → multi-agent
+- Progression: naive RAG → hybrid search + reranking → advanced RAG → agentic RAG → multi-agent
 - Multi-LLM open-source benchmark (quality / latency / cost)
 - Production patterns: observability (Phoenix), CI with eval regression, FastAPI serving
 
@@ -32,10 +32,13 @@ flowchart LR
   end
   subgraph Serving["Serving (online, 100% local)"]
     UI[UI · Gradio] -->|POST /ask| API[API · FastAPI]
-    API --> R[Retrieve · dense]
+    API --> R[Retrieve · dense · prefetch 50]
     R --> Q
-    R --> RR[Rerank · cross-encoder]
-    RR --> P[Grounded prompt]
+    R --> RR[Rerank · cross-encoder · top-20]
+    RR -.->|selection off| P
+    RR --> G[Grade · 0-3 per passage · LLM]
+    G --> E[Expand · ±n neighbouring chunks]
+    E --> P[Grounded prompt · trimmed to num_ctx]
     P --> LLM[Generate · Ollama granite4.1:8b]
     LLM --> API
     API -->|answer + sources| UI
@@ -44,22 +47,61 @@ flowchart LR
 
 The index is built once offline; every question is served online by retrieving
 from Qdrant, reranking with a cross-encoder, then generating a grounded answer
-with a local Ollama model. See [ADR 0001](docs/adr/0001-retrieval-strategy.md)
-(retrieval) and [ADR 0002](docs/adr/0002-generation-model.md) (generation).
+with a local Ollama model. Between the two, grading and expansion are switches:
+the grader scores each passage and keeps what holds part of the answer, the
+expansion reads each survivor with the chunks that surround it in its filing, so
+a statement cut across chunks reaches the prompt whole. With both off the graph
+reduces to retrieve → rerank → generate, the baseline every row is measured
+against. See [ADR 0001](docs/adr/0001-retrieval-strategy.md) (retrieval),
+[ADR 0002](docs/adr/0002-generation-model.md) (generation) and
+[ADR 0004](docs/adr/0004-crag-workflow-evidence-grid.md) (workflow rows).
 
 ---
 
 ## Results
 
-Retrieval quality on the 150 FinanceBench QA, doc-scoped (each question
-restricted to its source filing — see [ADR 0001](docs/adr/0001-retrieval-strategy.md)
-for the full comparison including BM25 and hybrid fusion):
+### Retrieval
 
-| Configuration | recall@5 | recall@10 | MRR | nDCG@10 |
-|---|---|---|---|---|
-| Dense (global, no doc filter) | 0.230 | 0.297 | 0.182 | 0.205 |
-| Dense (doc-scoped) | 0.402 | 0.552 | 0.338 | 0.377 |
-| **Dense + cross-encoder reranker** (default) | **0.549** | **0.649** | **0.433** | **0.473** |
+Retrieval quality on the 150 FinanceBench QA. Doc-scoped means the search is
+restricted to the question's source filing:
+
+| CONFIG | doc_scoped | prefetch | chunks | recall@5 | recall@10 | recall@20 | MRR | nDCG@10 | nDCG@20 |
+|---|---|---|---|---|---|---|---|---|---|
+| Dense | no | — | 512 | 0.230 | 0.297 | — | 0.182 | 0.205 | — |
+| Dense | yes | — | 512 | 0.402 | 0.552 | — | 0.338 | 0.377 | — |
+| Dense + reranker | yes | 50 | 512 | 0.549 | 0.649 | 0.744 | 0.438 | 0.473 | 0.499 |
+| Dense + reranker | yes | 50 | 256 | 0.513 | 0.623 | 0.738 | 0.442 | 0.467 | 0.498 |
+| Dense + reranker | yes | 50 | 1024 | 0.550 | 0.654 | 0.751 | 0.451 | 0.478 | 0.504 |
+
+The reranker is a `bge-reranker-v2-m3` cross-encoder re-scoring the dense shortlist
+(prefetch). The two dense rows and the 512 reranker row are the strategy ablation of
+[ADR 0001](docs/adr/0001-retrieval-strategy.md) (BM25 and hybrid fusion there too),
+the dense rows measured at depth 10; the three reranker rows vary only the chunk budget
+and are measured at depth 20 (MRR included, hence 0.438 rather than ADR 0001's 0.433
+for the 512 row). The 1024 row is what every generation row below is served:
+materialised once at depth 20, then replayed identically by each of them. Recall still
+gains about +0.10 from depth 10 to 20, hence 20 passages then grading.
+
+Recall is defined at the page level: a passage counts as soon as it lands on a gold
+page, whether or not it holds the figures the question needs. Measured directly, the
+share of FinanceBench's evidence text found in the 20 retrieved passages tells a
+different story:
+
+| chunks | k | tokens / prompt | evidence words | evidence numbers | questions with every evidence number |
+|---|---|---|---|---|---|
+| 256 | 20 | 4,300 | 0.726 | 0.628 | 29% |
+| 512 | 20 | 7,900 | 0.798 | 0.705 | 38% |
+| 1024 | 20 | 14,400 | 0.872 | 0.803 | 48% |
+
+Recall@20 is flat across chunk sizes, the evidence actually retrieved is not: 20
+passages of 256 tokens hold 63% of the evidence numbers, 20 of 1024 hold 80%. Per token
+the sizes are on par (256 at k20 matches 512 at k10, 512 at k20 matches 1024 at k10),
+so larger chunks win at a fixed depth only by carrying more text. An evidence averages
+443 tokens, beyond a single 256-token chunk for 63% of the questions. The last column is
+strict: an evidence is often a whole statement page of which the answer uses two
+figures.
+
+### Generation
 
 End-to-end generation quality on the 150 QA (corpus `docling_hybrid_1024_bge-m3`,
 `reranked(dense)` with a prefetch of 50, doc-scoped), best depth per model. Every
@@ -90,20 +132,20 @@ than a controlled comparison. Full table, depth ablation and analysis in
 | Model | Params | Setting | equivalent | correct | grounded | Prometheus (1–5) |
 |---|---|---|---:|---:|---:|---:|
 | **granite4.1:8b** | 8.8B | k20 | **65.3** | **65.3** | 87.3 | **4.15** |
-| granite4.1:8b + grader | 8.8B | k20, CRAG grading | 61.3 | 62.7 | 85.3 | pending |
+| granite4.1:8b + grader | 8.8B | k20 | 61.3 | 62.7 | 85.3 | 4.10 |
 | qwen3.5:4b | 4.7B | k20 | 60.0 | 60.0 | **99.3** | 4.07 |
 | qwen3.5:9b | 9.7B | k20 | 58.0 | 58.7 | **99.3** | 3.70 |
 | llama3.1:8b | 8.0B | k20 | 50.7 | 50.7 | 92.7 | 3.17 |
-| mistral-nemo | 12.2B | k5 | 47.3 | 48.7 | 77.3 | pending |
-| mistral:7b | 7.2B | k20 | 41.3 | 41.3 | 92.0 | pending |
-| granite4.1:3b | 3.4B | k5 | 40.0 | 42.7 | 74.7 | pending |
-| command-r7b | 8.0B | k5 | 38.7 | 40.0 | 68.7 | pending |
-| llama3.2:3b | 3.2B | k10 | 28.7 | 28.7 | 89.3 | pending |
-| *FinanceBench* gpt-4-1106-preview (GPT-4 Turbo) | undisclosed | singleStore | — | 48.0 | — | pending |
-| *FinanceBench* gpt-4 | undisclosed | singleStore | — | 41.3 | — | pending |
-| *FinanceBench* llama-2-70b-chat | 70B | singleStore | — | 37.3 | — | pending |
+| mistral-nemo | 12.2B | k5 | 47.3 | 48.7 | 77.3 | 3.33 |
+| mistral:7b | 7.2B | k20 | 41.3 | 41.3 | 92.0 | 3.27 |
+| granite4.1:3b | 3.4B | k5 | 40.0 | 42.7 | 74.7 | 3.10 |
+| command-r7b | 8.0B | k5 | 38.7 | 40.0 | 68.7 | 2.95 |
+| llama3.2:3b | 3.2B | k10 | 28.7 | 28.7 | 89.3 | 2.49 |
+| *FinanceBench* gpt-4-1106-preview (GPT-4 Turbo) | undisclosed | singleStore | — | 48.0 | — | 3.39 |
+| *FinanceBench* gpt-4 | undisclosed | singleStore | — | 41.3 | — | 2.71 |
+| *FinanceBench* llama-2-70b-chat | 70B | singleStore | — | 37.3 | — | 3.75 |
 
-The grader row is the CRAG workflow's per-passage grading (0–3, floor of 3
+The grader row is the advanced workflow's per-passage grading (0–3, floor of 3
 passages) on the same replayed top-20. It was generated at `num_ctx` 12288 while the
 plain k20 row used 30720, so the gap between the two mixes the grader's effect with
 the context window's; [ADR 0004](docs/adr/0004-crag-workflow-evidence-grid.md)
@@ -113,9 +155,11 @@ one.
 Key finding: **useful retrieval depth scales with model capability** — the
 k10→k20 step only helps the strongest models (flat for the 3B tier). See ADR 0002.
 
-**CRAG workflow.** The deterministic LangGraph workflow (`src/workflow/`) replays
-the same `reranked(dense)` top-20 passages for every row and generates with
-`granite4.1:8b`. A judge only reads each answer (correct? refused?); the code then
+### Advanced RAG workflow
+
+The deterministic LangGraph workflow (`src/workflow/`) replays the same
+`reranked(dense)` top-20 passages for every row and generates with `granite4.1:8b`.
+A judge only reads each answer (correct? refused?); the code then
 checks whether the gold evidence page actually reached the prompt, and the two
 together place the answer in one of five outcomes:
 
@@ -137,9 +181,9 @@ transitions, failure analysis and the judge validation are in
 
 | Workflow row | Good job | Unverified | Hallucinating | Need help | Don't know | Evidence in prompt | Latency / Q | LLM calls / Q |
 |---|---|---|---|---|---|---|---|---|
-| advanced, `num_ctx` 12288 (~10 passages) | 73 | 13 | 25 | 16 | 23 | 93 | 107 s | 1 |
-| grading 0–3 + floor of 3, `num_ctx` 12288 | 74 | 14 | 26 | 14 | 22 | 92 | 161 s | 20.9 |
-| **advanced, `num_ctx` 24576 (~20 passages)** | **79** | 13 | **17** | 22 | **19** | **105** | 187 s | 1 |
+| `num_ctx` 12288 (~10 passages) | 73 | 13 | 25 | 16 | 23 | 93 | 107 s | 1 |
+| `num_ctx` 12288 (grading 0–3 + floor of 3) | 74 | 14 | 26 | 14 | 22 | 92 | 161 s | 20.9 |
+| **`num_ctx` 24576 (~20 passages)** | **79** | 13 | **17** | 22 | **19** | **105** | 187 s | 1 |
 
 Key finding: the larger window is the best row, but only 4 of its 16 gains over
 the 12K window come from newly retrieved evidence. The rest reflect how
@@ -149,7 +193,7 @@ not the retrieval, is now the bottleneck on those questions.
 
 ---
 
-## Generation benchmark — local LLM lineup
+## Local LLM lineup
 
 The generation stage runs open-weight LLMs locally via Ollama on a single 8GB
 GPU (with automatic GPU/CPU layer offload for models that don't fully fit). The
@@ -265,7 +309,7 @@ finqa-engine/
 │   ├── chunk/
 │   ├── index/
 │   ├── rag/                       # naive RAG: retriever × LLM × k
-│   ├── workflow/                  # CRAG workflow rows (advanced, grading)
+│   ├── workflow/                  # advanced workflow rows (baseline, grading, expansion)
 │   └── evaluation/
 │       ├── retrieval/             # one config per retriever setup (chunks512_*)
 │       ├── judge/                 # one config per protocol: grid, correct_grounded, prometheus
@@ -281,7 +325,7 @@ finqa-engine/
 │   ├── retrieval/                 # dense, BM25, hybrid, reranker
 │   ├── llm/                       # Ollama client + versioned prompts
 │   ├── rag/                       # naive pipeline: retrieve once, generate once
-│   ├── workflow/                  # deterministic CRAG graph (LangGraph): grading, context trimming
+│   ├── workflow/                  # advanced RAG graph (LangGraph): grading, expansion, trimming
 │   ├── agents/                    # ReAct agent (final comparison tier)
 │   ├── evaluation/                # run_retrieval / run_judge / run_ragas entry points
 │   │   ├── common/                # golden set, gold-page matching, JSONL plumbing

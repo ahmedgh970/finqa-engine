@@ -18,6 +18,7 @@ from src.llm.client import (
 from src.llm.prompts import build_prompt
 from src.retrieval.base import Retriever
 from src.workflow.config import WorkflowConfig
+from src.workflow.expansion import expand
 from src.workflow.prompts import build_grading_prompt
 from src.workflow.schemas import ChunkGrade
 from src.workflow.state import CragState
@@ -113,6 +114,25 @@ def make_grade(config: WorkflowConfig):
     return grade
 
 
+def make_expand(config: WorkflowConfig):
+    """Widen the selected passages to their neighbouring chunks (no LLM call)."""
+    from src.ingestion.storage import read_chunks
+
+    corpus = {c.chunk_id: c for c in read_chunks(config.chunks_path)}
+
+    def expand_node(state: CragState) -> dict:
+        started = time.perf_counter()
+        graded = state.get("graded")
+        selected = graded if graded is not None else state["chunks"]
+        widened = expand(selected, corpus, config.expansion.window)
+        return {
+            "expanded": widened,
+            "node_latencies": _timed(state, "expand", started),
+        }
+
+    return expand_node
+
+
 def _fit_context(chunks: list[Chunk], question: str, config: WorkflowConfig) -> list[Chunk]:
     """Drop the lowest-ranked passages until the prompt fits the pinned context.
 
@@ -144,8 +164,13 @@ def make_generate(config: WorkflowConfig):
 
     def generate_node(state: CragState) -> dict:
         started = time.perf_counter()
+        expanded = state.get("expanded")
         graded = state.get("graded")
-        selected = graded if graded is not None else state["chunks"]
+        selected = (
+            expanded
+            if expanded is not None
+            else (graded if graded is not None else state["chunks"])
+        )
         sources = _fit_context(selected, state["question"], config)
         text = generate(build_prompt(state["question"], sources), config.llm)
         return {
