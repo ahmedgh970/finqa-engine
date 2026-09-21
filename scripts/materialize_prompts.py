@@ -5,9 +5,11 @@ and freezes the exact prompt build_prompt() would send to the LLM -- so the
 multi-model / multi-num_ctx benchmark can feed prompts straight to each LLM
 without ever re-running the retriever + reranker (the slow, GPU-bound part).
 
-Efficiency: reranked(dense) prefetches a fixed pool (50) and returns the top-k
-of one reranked ordering, so top-5/10/20 are nested prefixes. We retrieve once
-at max(k) per question and slice -- identical results, a third of the retrieval.
+Efficiency: reranked(dense) prefetches a pool (50 by default) and returns the
+top-k of one reranked ordering, so top-5/10/20 are nested prefixes. We retrieve
+once at max(k) per question and slice -- identical results, a third of the
+retrieval. The pool depth is part of the output filename: a deeper pool reranks
+more candidates and is a different retrieval, not a deeper slice of this one.
 
 Output: one JSONL per k at data/processed/prompts/prompts_k{k}.jsonl, each line
 carrying everything downstream needs (generation, judge, Ragas):
@@ -22,6 +24,7 @@ Resumable: a (question, k) already written is skipped.
     uv run python scripts/materialize_prompts.py
     uv run python scripts/materialize_prompts.py --limit 5        # smoke test
     uv run python scripts/materialize_prompts.py --chunk-size 512 --ks 20
+    uv run python scripts/materialize_prompts.py --chunk-size 256 --ks 50 --prefetch 70
 """
 
 from __future__ import annotations
@@ -49,7 +52,9 @@ RETRIEVER = "reranked"
 BASE_RETRIEVER = "dense"
 DOC_SCOPED = True
 PREFETCH = 50  # reference value (ADR 0001); must match `make answer` -- a smaller
-# pool would rerank fewer candidates and change which top-k chunks come out.
+# pool would rerank fewer candidates and change which top-k chunks come out. It is
+# overridable so a deeper pool can be measured, and it must stay at or above max(ks):
+# the top-k of a shortlist shorter than k does not exist.
 
 
 def _collection(chunk_size: int) -> str:
@@ -60,11 +65,11 @@ def _chunks_path(chunk_size: int) -> str:
     return f"data/processed/docling/chunked/hybrid/chunks_{chunk_size}.jsonl"
 
 
-def _out_path(k: int, chunk_size: int) -> Path:
+def _out_path(k: int, chunk_size: int, prefetch: int = PREFETCH) -> Path:
     """Self-documenting filename encoding the retrieval setup (like the answers files)."""
     scope = "docscoped" if DOC_SCOPED else "global"
     stem = (
-        f"prompts_{RETRIEVER}-{BASE_RETRIEVER}_{_collection(chunk_size)}_{scope}_pf{PREFETCH}_k{k}"
+        f"prompts_{RETRIEVER}-{BASE_RETRIEVER}_{_collection(chunk_size)}_{scope}_pf{prefetch}_k{k}"
     )
     return OUT_DIR / f"{stem}.jsonl"
 
@@ -77,24 +82,29 @@ def _done_ids(path: Path) -> set[str]:
 
 
 def run(
-    limit: int | None = None, chunk_size: int = CHUNK_SIZE, ks: list[int] | None = None
+    limit: int | None = None,
+    chunk_size: int = CHUNK_SIZE,
+    ks: list[int] | None = None,
+    prefetch: int = PREFETCH,
 ) -> None:
     ks = ks or KS
+    if prefetch < max(ks):
+        raise SystemExit(f"prefetch {prefetch} is below the deepest k ({max(ks)}): nothing to rank")
     cfg = RagConfig(
         chunks_path=_chunks_path(chunk_size),
         collection_name=_collection(chunk_size),
         retriever=RETRIEVER,
         base_retriever=BASE_RETRIEVER,
         doc_scoped=DOC_SCOPED,
-        rerank_prefetch=PREFETCH,
+        rerank_prefetch=prefetch,
     )
     qas = load_golden_set(cfg.golden_set_path)
     if limit is not None:
         qas = qas[:limit]
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    files = {k: _out_path(k, chunk_size).open("a", encoding="utf-8") for k in ks}
-    done = {k: _done_ids(_out_path(k, chunk_size)) for k in ks}
+    files = {k: _out_path(k, chunk_size, prefetch).open("a", encoding="utf-8") for k in ks}
+    done = {k: _done_ids(_out_path(k, chunk_size, prefetch)) for k in ks}
 
     retriever = build_retriever(cfg.retriever, cfg)
     written = {k: 0 for k in ks}
@@ -134,7 +144,10 @@ def run(
     for f in files.values():
         f.close()
     summary = " | ".join(f"k{k}: +{written[k]} (skipped {len(done[k])})" for k in ks)
-    print(f"materialized prompts ({chunk_size}-token chunks) -> {OUT_DIR}/\n  {summary}")
+    print(
+        f"materialized prompts ({chunk_size}-token chunks, prefetch {prefetch}) "
+        f"-> {OUT_DIR}/\n  {summary}"
+    )
 
 
 def main() -> None:
@@ -152,8 +165,14 @@ def main() -> None:
     parser.add_argument(
         "--ks", type=int, nargs="+", default=KS, help="Depths to materialize (default 5 10 20)."
     )
+    parser.add_argument(
+        "--prefetch",
+        type=int,
+        default=PREFETCH,
+        help="Candidates reranked per question (default 50); must be >= the deepest k.",
+    )
     args = parser.parse_args()
-    run(limit=args.limit, chunk_size=args.chunk_size, ks=args.ks)
+    run(limit=args.limit, chunk_size=args.chunk_size, ks=args.ks, prefetch=args.prefetch)
 
 
 if __name__ == "__main__":
