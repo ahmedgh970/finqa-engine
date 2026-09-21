@@ -1,5 +1,9 @@
 # ADR 0003 — Juge local reproductible : Prometheus-2 vs juge frontier (Claude)
 
+> La reproductibilité annoncée ici a depuis été vérifiée, la validation étendue de
+> 4 à 9 modèles, et la limite sur les refus requalifiée : voir
+> « Amendement du 2026-09-21 » en fin de document.
+
 ## Statut
 
 Accepté.
@@ -129,3 +133,72 @@ lit les **moyennes absolues** de Prometheus (le *classement*, lui, tient).
 - **Reste à mesurer** (ADR suivant) : Ragas (faithfulness, answer_relevancy) sur
   les meilleurs modèles à k20 — une lentille orthogonale (fidélité au contexte /
   pertinence), sans golden set côté génération.
+
+## Amendement du 2026-09-21 : reproductibilité vérifiée, extension à 13 lignes
+
+Le juge a servi à remplir la colonne Prometheus du tableau de génération du
+README : nos 10 lignes (9 modèles locaux à leur meilleure profondeur, plus la
+ligne grading du workflow) et les 3 jeux de réponses publiés par FinanceBench
+en `singleStore`. Trois conclusions s'ajoutent à l'ADR.
+
+### 1. Reproductibilité : vérifiée
+
+Trois cellules déjà notées en juillet ont été re-jugées avec le même protocole,
+le même modèle et `temperature=0`, à plusieurs semaines d'écart :
+
+| Cellule | ADR 0003 | Re-run | Δ |
+|---|---:|---:|---:|
+| granite4.1:8b k20 | 4.17 | 4.153 | 0.017 |
+| qwen3.5:4b k20 | 4.11 | 4.067 | 0.043 |
+| qwen3.5:9b k20 | 3.64 | 3.700 | 0.060 |
+
+Écart maximal **0,06 point sur 5**, classement inchangé. La quantification q4 et
+l'échantillonnage résiduel d'Ollama expliquent ce bruit. C'est la propriété qui
+motivait le choix de Prometheus face au juge frontier : le même run re-jugé
+redonne le même chiffre.
+
+### 2. L'accord de classement tient sur 10 lignes
+
+L'ADR validait ρ = 0,929 sur 8 cellules et 4 modèles. Sur les 10 lignes du
+tableau du README, qui couvrent 9 modèles de 3 à 12 milliards de paramètres et
+une ligne de workflow :
+
+- **ρ = 0,964** contre `equivalent` (correct et grounded) ;
+- ρ = 0,939 contre `correct` seul.
+
+L'accord ne se dégrade donc pas en élargissant l'éventail des modèles, il
+s'améliore. Prometheus reste utilisable comme instrument de classement.
+
+### 3. Les refus cassent la comparaison entre familles de lignes
+
+La limite « Prometheus conflate refus et erreur » était assumée comme sans effet
+sur l'ordre. Les réponses publiées par FinanceBench montrent qu'elle **cesse
+d'être inoffensive dès que les taux de refus diffèrent fortement** entre les
+lignes comparées. Les décomptes viennent du champ `label` publié avec chaque
+réponse, ils ne sont pas estimés :
+
+| Ligne publiée | Refus / 150 | Réponses fausses | correct (audité) | Prometheus |
+|---|---:|---:|---:|---:|
+| gpt-4-1106-preview | 58 | 17 | 48,0 % | 3.393 |
+| gpt-4 | 71 | 16 | 41,3 % | 2.713 |
+| llama-2-70b-chat | 7 | 81 | 37,3 % | **3.747** |
+
+llama-2-70b-chat devance les deux lignes GPT-4 chez Prometheus tout en étant la
+moins souvent correcte des trois : il répond faux 81 fois là où GPT-4 s'abstient,
+et un refus vaut 1 quand une réponse fausse mais plausible obtient souvent 2 ou 3.
+Sur les 13 lignes réunies, l'accord avec `correct` tombe à **ρ = 0,737**, contre
+0,939 sur nos 10 lignes seules, dont les taux de refus sont comparables.
+
+**Règle d'usage retenue** : comparer les notes Prometheus **à l'intérieur d'une
+famille de lignes dont le taux de refus est comparable**, jamais entre familles.
+Le tableau du README porte cette réserve sous les lignes publiées.
+
+### Conséquences
+
+- La colonne Prometheus du README est renseignée pour les 13 lignes, avec la
+  réserve ci-dessus.
+- Les limites de l'ADR restent valables ; la première (refus notés 1) est
+  requalifiée : elle n'est neutre sur le classement que **si** les lignes
+  comparées refusent à un taux voisin.
+- Le protocole, le modèle et la configuration sont inchangés : cet amendement
+  n'ajoute aucune décision, il étend la validation et précise une limite.
