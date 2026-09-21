@@ -121,6 +121,7 @@ def run(
                 "n_kept_by_grade": result.n_kept_by_grade,
                 "n_kept_by_floor": result.n_kept_by_floor,
                 "n_dropped_to_fit": result.n_dropped_to_fit,
+                "n_expanded": result.n_expanded,
                 "grades": result.grades,
                 "max_grade": result.max_grade,
                 "low_confidence": result.low_confidence,

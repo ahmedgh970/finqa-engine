@@ -33,6 +33,9 @@ class CragState(TypedDict, total=False):
     max_grade: int
     low_confidence: bool  # recorded, never acted upon
 
+    # Neighbourhood expansion
+    expanded: list[Chunk]  # the selection widened to the chunks around each passage
+
     # Numeric path
     is_numeric: bool
     computed: str | None

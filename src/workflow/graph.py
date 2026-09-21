@@ -1,4 +1,4 @@
-"""The CRAG graph: retrieve -> [grade] -> generate.
+"""The CRAG graph: retrieve -> [grade] -> [expand] -> generate.
 
 Only the nodes enabled by the config are wired in, so one graph serves every row of
 the ablation matrix. With grading off it reduces to retrieve -> generate, which is the
@@ -23,7 +23,7 @@ from langgraph.graph import END, START, StateGraph
 from src.ingestion.schema import Chunk
 from src.retrieval.base import Retriever
 from src.workflow.config import WorkflowConfig
-from src.workflow.nodes import make_generate, make_grade, make_retrieve
+from src.workflow.nodes import make_expand, make_generate, make_grade, make_retrieve
 from src.workflow.state import CragState
 
 
@@ -38,6 +38,7 @@ class WorkflowAnswer:
     n_kept_by_grade: int = 0
     n_kept_by_floor: int = 0
     n_dropped_to_fit: int = 0
+    n_expanded: int = 0  # passages added around the selection by the expansion node
     grades: list[int] = field(default_factory=list)
     max_grade: int | None = None
     low_confidence: bool = False
@@ -52,12 +53,16 @@ def build_graph(retriever: Retriever, config: WorkflowConfig):
     builder.add_node("generate", make_generate(config))
     builder.add_edge(START, "retrieve")
 
+    selected_by = "retrieve"
     if config.grading.enabled:
         builder.add_node("grade", make_grade(config))
-        builder.add_edge("retrieve", "grade")
-        builder.add_edge("grade", "generate")
-    else:
-        builder.add_edge("retrieve", "generate")
+        builder.add_edge(selected_by, "grade")
+        selected_by = "grade"
+    if config.expansion.enabled:
+        builder.add_node("expand", make_expand(config))
+        builder.add_edge(selected_by, "expand")
+        selected_by = "expand"
+    builder.add_edge(selected_by, "generate")
 
     builder.add_edge("generate", END)
     return builder.compile()
@@ -81,6 +86,7 @@ def answer_workflow(
         n_kept_by_grade=state.get("n_kept_by_grade", 0),
         n_kept_by_floor=state.get("n_kept_by_floor", 0),
         n_dropped_to_fit=state.get("n_dropped_to_fit", 0),
+        n_expanded=len(state.get("expanded", [])),
         grades=state.get("grades", []),
         max_grade=state.get("max_grade"),
         low_confidence=state.get("low_confidence", False),
