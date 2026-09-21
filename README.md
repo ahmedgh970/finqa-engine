@@ -112,9 +112,10 @@ answer is read in full and compared with the gold on two independent axes:
   invented figures or unjustified assumptions;
 - **equivalent** = correct **and** grounded, the headline metric;
 - **Prometheus**: mean 1–5 score from the open Prometheus-2 judge on its verbatim
-  Absolute Grading rubric, run locally. It is validated to rank systems the same way
-  (Spearman ρ = 0.93, [ADR 0003](docs/adr/0003-prometheus-judge.md)); read it as a
-  ranking, not as an absolute grade.
+  Absolute Grading rubric, run locally. It ranks our ten rows almost exactly as
+  `equivalent` does (Spearman ρ = 0.96, against 0.93 on the four models of
+  [ADR 0003](docs/adr/0003-prometheus-judge.md)); read it as a ranking, not as an
+  absolute grade.
 
 Our rows are judged by Claude on the correct / grounded protocol. The FinanceBench
 rows are the answers published with the benchmark for its `singleStore` setting (one
@@ -151,6 +152,15 @@ plain k20 row used 30720, so the gap between the two mixes the grader's effect w
 the context window's; [ADR 0004](docs/adr/0004-crag-workflow-evidence-grid.md)
 compares them at equal window. It costs about 20 LLM calls per question instead of
 one.
+
+Prometheus scores a refusal 1, so it reads caution as failure. On our ten rows it
+agrees with `correct` at ρ = 0.94; add the three published rows and the agreement over
+the thirteen falls to 0.74, because that is where refusals concentrate.
+llama-2-70b-chat refuses 7 times and answers wrongly 81, yet outranks both GPT-4 rows
+on Prometheus (3.75 against 3.39 and 2.71) while being correct less often (37.3 against
+48.0 and 41.3); those two refuse 58 and 71 times out of 150.
+Compare Prometheus within a family of rows that refuse at a similar rate, not across
+the whole table.
 
 Key finding: **useful retrieval depth scales with model capability** — the
 k10→k20 step only helps the strongest models (flat for the 3B tier). See ADR 0002.
