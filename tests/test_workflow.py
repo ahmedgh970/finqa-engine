@@ -1,4 +1,4 @@
-"""Fast unit tests for the deterministic CRAG workflow (no GPU, no LLM, no Qdrant)."""
+"""Fast unit tests for the deterministic advanced RAG workflow (no GPU, no LLM, no Qdrant)."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def test_variant_name_covers_the_ablation_matrix():
     assert variant_name(_config(calculator={"enabled": True})) == "calc"
     assert (
         variant_name(_config(grading={"enabled": True}, calculator={"enabled": True}))
-        == "crag_full"
+        == "grading_calc"
     )
 
 

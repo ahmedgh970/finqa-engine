@@ -1,4 +1,4 @@
-"""CLI runner: answer every FinanceBench QA with the deterministic CRAG workflow.
+"""CLI runner: answer every FinanceBench QA with the deterministic advanced RAG workflow.
 
 Builds the retriever once, runs the configured graph per QA, and writes answer +
 sources + the workflow instrumentation (rewrite rounds, calculator trigger,
@@ -137,7 +137,7 @@ def run(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Answer FinanceBench QA with the deterministic CRAG workflow."
+        description="Answer FinanceBench QA with the deterministic advanced RAG workflow."
     )
     parser.add_argument("--config", required=True, help="Path to a workflow YAML config.")
     parser.add_argument("--id", help="Answer only this QA id, skipping the rest.")

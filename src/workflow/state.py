@@ -1,4 +1,4 @@
-"""State carried through the CRAG graph.
+"""State carried through the advanced RAG graph.
 
 One flat TypedDict rather than nested objects: LangGraph merges the partial dict a
 node returns into the state, so a flat shape keeps every node's contract obvious.

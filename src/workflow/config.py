@@ -1,4 +1,4 @@
-"""Configuration schema for a CRAG workflow run (1 YAML = 1 reproducible experiment).
+"""Configuration schema for an advanced RAG workflow run (1 YAML = 1 reproducible experiment).
 
 Extends the RAG config with the switches that select a row of the ablation matrix.
 Grading and the calculator act on different failure modes -- noisy retrieval versus
@@ -36,7 +36,7 @@ class GradingConfig(BaseModel):
     keep_threshold: int = Field(default=2, ge=0, le=3)
     min_chunks: int = Field(default=3, ge=0)
     # Records low_confidence when the best grade across all passages stays below this:
-    # the grader saw nothing usable anywhere, which is CRAG's second threshold. No
+    # the grader saw nothing usable anywhere, which is the corrective-RAG paper's second threshold. No
     # action follows -- it is kept as the hook a later node could branch on, so the
     # signal exists in the records rather than requiring a re-run to obtain. Note it
     # carries information of its own only when it differs from keep_threshold; at equal
@@ -70,7 +70,7 @@ class CalculatorConfig(BaseModel):
 
 
 class WorkflowConfig(RagConfig):
-    """Parameters of a CRAG workflow run."""
+    """Parameters of an advanced RAG workflow run."""
 
     # Names the ablation cell when the switches no longer describe it: a row whose
     # selection was computed by an earlier run and is replayed from it has grading off
@@ -100,7 +100,7 @@ def variant_name(config: WorkflowConfig) -> str:
         (False, False): "advanced",
         (True, False): "grading",
         (False, True): "calc",
-        (True, True): "crag_full",
+        (True, True): "grading_calc",
     }[(config.grading.enabled, config.calculator.enabled)]
     # The expansion window changes what the generator reads, so it belongs to the cell.
     return f"{name}_pm{config.expansion.window}" if config.expansion.enabled else name

@@ -1,4 +1,4 @@
-"""The CRAG graph: retrieve -> [grade] -> [expand] -> generate.
+"""The advanced RAG graph: retrieve -> [grade] -> [expand] -> generate.
 
 Only the nodes enabled by the config are wired in, so one graph serves every row of
 the ablation matrix. With grading off it reduces to retrieve -> generate, which is the
@@ -74,7 +74,7 @@ def answer_workflow(
     config: WorkflowConfig,
     doc_id: str | None = None,
 ) -> WorkflowAnswer:
-    """Answer ``question`` by running the configured CRAG graph once."""
+    """Answer ``question`` by running the configured graph once."""
     graph = build_graph(retriever, config)
     start = time.perf_counter()
     state: CragState = graph.invoke({"question": question, "doc_id": doc_id})

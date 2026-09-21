@@ -1,4 +1,4 @@
-"""Deterministic CRAG workflow: the graph controls the flow, the LLM only judges.
+"""Deterministic Advanced RAG workflow: the graph controls the flow, the LLM only judges.
 
 Contrast with :mod:`src.agents`, where the LLM decides which tool to call and when.
 Here every branch is a conditional edge evaluated by the graph; the LLM produces

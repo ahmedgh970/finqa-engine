@@ -14,7 +14,7 @@ FinanceBench shows that state-of-the-art RAG systems fail on ~80% of financial q
 
 **What this repo demonstrates:**
 - Reproducible evaluation pipeline (retrieval metrics + LLM judge + Ragas)
-- Progression: naive RAG → hybrid search + reranking → agentic RAG → multi-agent
+- Progression: naive RAG → hybrid search + reranking → advanced RAG → agentic RAG → multi-agent
 - Multi-LLM open-source benchmark (quality / latency / cost)
 - Production patterns: observability (Phoenix), CI with eval regression, FastAPI serving
 
@@ -32,10 +32,13 @@ flowchart LR
   end
   subgraph Serving["Serving (online, 100% local)"]
     UI[UI · Gradio] -->|POST /ask| API[API · FastAPI]
-    API --> R[Retrieve · dense]
+    API --> R[Retrieve · dense · prefetch 50]
     R --> Q
-    R --> RR[Rerank · cross-encoder]
-    RR --> P[Grounded prompt]
+    R --> RR[Rerank · cross-encoder · top-20]
+    RR -.->|selection off| P
+    RR --> G[Grade · 0-3 per passage · LLM]
+    G --> E[Expand · ±n neighbouring chunks]
+    E --> P[Grounded prompt · trimmed to num_ctx]
     P --> LLM[Generate · Ollama granite4.1:8b]
     LLM --> API
     API -->|answer + sources| UI
@@ -44,8 +47,14 @@ flowchart LR
 
 The index is built once offline; every question is served online by retrieving
 from Qdrant, reranking with a cross-encoder, then generating a grounded answer
-with a local Ollama model. See [ADR 0001](docs/adr/0001-retrieval-strategy.md)
-(retrieval) and [ADR 0002](docs/adr/0002-generation-model.md) (generation).
+with a local Ollama model. Between the two, grading and expansion are switches:
+the grader scores each passage and keeps what holds part of the answer, the
+expansion reads each survivor with the chunks that surround it in its filing, so
+a statement cut across chunks reaches the prompt whole. With both off the graph
+reduces to retrieve → rerank → generate, the baseline every row is measured
+against. See [ADR 0001](docs/adr/0001-retrieval-strategy.md) (retrieval),
+[ADR 0002](docs/adr/0002-generation-model.md) (generation) and
+[ADR 0004](docs/adr/0004-crag-workflow-evidence-grid.md) (workflow rows).
 
 ---
 
@@ -136,7 +145,7 @@ than a controlled comparison. Full table, depth ablation and analysis in
 | *FinanceBench* gpt-4 | undisclosed | singleStore | — | 41.3 | — | 2.71 |
 | *FinanceBench* llama-2-70b-chat | 70B | singleStore | — | 37.3 | — | 3.75 |
 
-The grader row is the CRAG workflow's per-passage grading (0–3, floor of 3
+The grader row is the advanced workflow's per-passage grading (0–3, floor of 3
 passages) on the same replayed top-20. It was generated at `num_ctx` 12288 while the
 plain k20 row used 30720, so the gap between the two mixes the grader's effect with
 the context window's; [ADR 0004](docs/adr/0004-crag-workflow-evidence-grid.md)
@@ -146,7 +155,7 @@ one.
 Key finding: **useful retrieval depth scales with model capability** — the
 k10→k20 step only helps the strongest models (flat for the 3B tier). See ADR 0002.
 
-### CRAG workflow
+### Advanced RAG workflow
 
 The deterministic LangGraph workflow (`src/workflow/`) replays the same
 `reranked(dense)` top-20 passages for every row and generates with `granite4.1:8b`.
@@ -172,9 +181,9 @@ transitions, failure analysis and the judge validation are in
 
 | Workflow row | Good job | Unverified | Hallucinating | Need help | Don't know | Evidence in prompt | Latency / Q | LLM calls / Q |
 |---|---|---|---|---|---|---|---|---|
-| advanced, `num_ctx` 12288 (~10 passages) | 73 | 13 | 25 | 16 | 23 | 93 | 107 s | 1 |
-| grading 0–3 + floor of 3, `num_ctx` 12288 | 74 | 14 | 26 | 14 | 22 | 92 | 161 s | 20.9 |
-| **advanced, `num_ctx` 24576 (~20 passages)** | **79** | 13 | **17** | 22 | **19** | **105** | 187 s | 1 |
+| `num_ctx` 12288 (~10 passages) | 73 | 13 | 25 | 16 | 23 | 93 | 107 s | 1 |
+| `num_ctx` 12288 (grading 0–3 + floor of 3) | 74 | 14 | 26 | 14 | 22 | 92 | 161 s | 20.9 |
+| **`num_ctx` 24576 (~20 passages)** | **79** | 13 | **17** | 22 | **19** | **105** | 187 s | 1 |
 
 Key finding: the larger window is the best row, but only 4 of its 16 gains over
 the 12K window come from newly retrieved evidence. The rest reflect how
@@ -300,7 +309,7 @@ finqa-engine/
 │   ├── chunk/
 │   ├── index/
 │   ├── rag/                       # naive RAG: retriever × LLM × k
-│   ├── workflow/                  # CRAG workflow rows (advanced, grading)
+│   ├── workflow/                  # advanced workflow rows (baseline, grading, expansion)
 │   └── evaluation/
 │       ├── retrieval/             # one config per retriever setup (chunks512_*)
 │       ├── judge/                 # one config per protocol: grid, correct_grounded, prometheus
@@ -316,7 +325,7 @@ finqa-engine/
 │   ├── retrieval/                 # dense, BM25, hybrid, reranker
 │   ├── llm/                       # Ollama client + versioned prompts
 │   ├── rag/                       # naive pipeline: retrieve once, generate once
-│   ├── workflow/                  # deterministic CRAG graph (LangGraph): grading, context trimming
+│   ├── workflow/                  # advanced RAG graph (LangGraph): grading, expansion, trimming
 │   ├── agents/                    # ReAct agent (final comparison tier)
 │   ├── evaluation/                # run_retrieval / run_judge / run_ragas entry points
 │   │   ├── common/                # golden set, gold-page matching, JSONL plumbing
