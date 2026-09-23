@@ -101,6 +101,43 @@ so larger chunks win at a fixed depth only by carrying more text. An evidence av
 strict: an evidence is often a whole statement page of which the answer uses two
 figures.
 
+#### What fits a 12K window
+
+A context window is VRAM: it sizes the KV cache, so it is the budget to spend, not a
+number to raise. The rows below all run at `num_ctx` 12288 and differ by what they put
+in it — the chunk size, the grade a passage must reach to be kept, and how many
+neighbouring chunks each survivor is read with. *Trimmed* counts the questions whose
+context did not fit and was cut back; *complete* is the share of questions holding
+every figure their evidence is built from.
+
+| chunks | grade ≥ | window | passages read | tokens | trimmed | figures | complete |
+|---|---|---|---|---|---|---|---|
+| 1024 | — | — | 10.2 | 7593 | 147 | 0.648 | 43.9% |
+| 1024 | 2 | — | 5.6 | 4048 | 10 | 0.656 | 44.6% |
+| **1024** | **2** | **±1** | 11.4 | **6314** | 64 | **0.722** | **56.8%** |
+| 1024 | 2 | ±2 | 13.9 | 7236 | 102 | 0.707 | 56.1% |
+| 1024 | 3 | ±1 | 9.7 | 5444 | 27 | 0.684 | 52.5% |
+| 512 | — | ±1 | 22.5 | 7694 | 145 | 0.661 | 47.5% |
+| 256 | — | — | 19.6 | 4261 | 0 | 0.568 | 36.0% |
+| 256 | 2 | — | 5.9 | 1285 | 0 | 0.414 | 23.0% |
+| 256 | 2 | ±4 | 30.1 | 5884 | 42 | 0.661 | 52.5% |
+
+**Grading and expansion are one mechanism, not two.** Alone, the grader keeps 5.6
+passages out of 20 and reads 4048 tokens — a third of the window, and no more evidence
+than reading all twenty. Alone, expansion has nothing to select: every passage becomes
+an anchor, the window saturates and 147 of the 150 questions are cut back. Together
+they hold 56.8% of the questions complete in 6314 tokens, which is what `reranked(dense)`
+top-20 needs a 24K window to reach.
+
+**Reading beats retrieving more.** A grade of 2 — the passage holds part of what the
+answer is built from — is the right bar: at 3 the surviving anchors are too few and
+their neighbourhoods miss the rest of the statement. And each corpus needs the window
+its chunks imply: ±1 on 1024-token chunks, ±4 on 256-token ones, for a context four
+times more fragmented and 4 points less complete.
+
+These are measures of what reaches the prompt, not of answers. The generation rows
+below show the two do not always move together.
+
 ### Generation
 
 End-to-end generation quality on the 150 QA (corpus `docling_hybrid_1024_bge-m3`,
