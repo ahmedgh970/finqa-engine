@@ -1,0 +1,34 @@
+# The reference configuration of ADR 0005: the 1024-token corpus, graded 0-3 with a
+# threshold of 2, each survivor read with the chunk on either side of it, at num_ctx
+# 12288.
+#
+# Measured on the context alone, it holds every figure the evidence is built from for
+# 56.8% of the questions in 6314 tokens -- what the ungraded top-20 needs a 24K window
+# to reach -- and, on the 22 questions whose wording carries the formula, 12 have every
+# input the formula asks for. This row is what turns that into answers.
+#
+# Generation replays the selection grading_1024.yaml already made: grading is
+# deterministic at temperature 0 and its grades are recorded per passage, so the widened
+# context is rebuilt offline by scripts/expand_context.py rather than by spending ~3000
+# LLM calls again. The row's real cost stays ~21 calls per question, of which only the
+# generation is spent here.
+#
+#   uv run python -m src.workflow.runner --config configs/workflow/grading_1024_pm1_replayed.yaml
+name: grading_pm1
+chunks_path: data/processed/docling/chunked/hybrid/chunks_1024.jsonl
+collection_name: docling_hybrid_1024_bge-m3
+retriever: replay
+replay_path: data/processed/prompts/expanded/workflow_grading_replay_docling_hybrid_1024_bge-m3_ollama_chat_granite4.1:8b_k20_12kc_pm1.jsonl
+doc_scoped: true
+k: 200   # the whole widened context; the trim to num_ctx decides what survives
+grading:
+  enabled: false   # replayed from grading_1024.yaml, see above
+expansion:
+  enabled: false   # already applied offline
+calculator:
+  enabled: false
+llm:
+  model: ollama_chat/granite4.1:8b
+  temperature: 0.0
+  max_tokens: 1024
+  num_ctx: 12288

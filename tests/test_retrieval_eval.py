@@ -117,7 +117,7 @@ def test_report_is_named_after_the_config():
 
 def test_every_shipped_retrieval_config_loads():
     configs = sorted(Path("configs/evaluation/retrieval").glob("*.yaml"))
-    assert len(configs) == 13
+    assert len(configs) == 14
     for path in configs:
         cfg = load_retrieval_eval_config(str(path))
         assert cfg.doc_scoped
