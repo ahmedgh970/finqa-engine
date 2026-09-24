@@ -1,0 +1,11 @@
+# Retrieval eval of what the generator actually read on the reference row of ADR 0005
+# (1024-token chunks, grade >= 2, window 1, num_ctx 12288): the replay reads the
+# workflow's answers file, whose sources are the context after grading, expansion and
+# the trim. Widened contexts hold more than 20 passages, so @100 scores the whole of it.
+# make eval-retrieval CONFIG=configs/evaluation/retrieval/chunks1024_grading_pm1_12kc.yaml
+chunks_path: data/processed/docling/chunked/hybrid/chunks_1024.jsonl
+collection_name: docling_hybrid_1024_bge-m3
+retriever: replay
+replay_path: data/processed/answers/workflow/workflow_grading_pm1_replay_docling_hybrid_1024_bge-m3_ollama_chat_granite4.1:8b_k200_12kc.jsonl
+doc_scoped: true
+k_values: [5, 10, 20, 100]

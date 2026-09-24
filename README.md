@@ -101,6 +101,43 @@ so larger chunks win at a fixed depth only by carrying more text. An evidence av
 strict: an evidence is often a whole statement page of which the answer uses two
 figures.
 
+#### What fits a 12K window
+
+A context window is VRAM: it sizes the KV cache, so it is the budget to spend, not a
+number to raise. The rows below all run at `num_ctx` 12288 and differ by what they put
+in it — the chunk size, the grade a passage must reach to be kept, and how many
+neighbouring chunks each survivor is read with. *Trimmed* counts the questions whose
+context did not fit and was cut back; *complete* is the share of questions holding
+every figure their evidence is built from.
+
+| chunks | grade ≥ | window | passages read | tokens | trimmed | figures | complete |
+|---|---|---|---|---|---|---|---|
+| 1024 | — | — | 10.2 | 7593 | 147 | 0.648 | 43.9% |
+| 1024 | 2 | — | 5.6 | 4048 | 10 | 0.656 | 44.6% |
+| **1024** | **2** | **±1** | 11.4 | **6314** | 64 | **0.722** | **56.8%** |
+| 1024 | 2 | ±2 | 13.9 | 7236 | 102 | 0.707 | 56.1% |
+| 1024 | 3 | ±1 | 9.7 | 5444 | 27 | 0.684 | 52.5% |
+| 512 | — | ±1 | 22.5 | 7694 | 145 | 0.661 | 47.5% |
+| 256 | — | — | 19.6 | 4261 | 0 | 0.568 | 36.0% |
+| 256 | 2 | — | 5.9 | 1285 | 0 | 0.414 | 23.0% |
+| 256 | 2 | ±4 | 30.1 | 5884 | 42 | 0.661 | 52.5% |
+
+**Grading and expansion are one mechanism, not two.** Alone, the grader keeps 5.6
+passages out of 20 and reads 4048 tokens — a third of the window, and no more evidence
+than reading all twenty. Alone, expansion has nothing to select: every passage becomes
+an anchor, the window saturates and 147 of the 150 questions are cut back. Together
+they hold 56.8% of the questions complete in 6314 tokens, which is what `reranked(dense)`
+top-20 needs a 24K window to reach.
+
+**Reading beats retrieving more.** A grade of 2 — the passage holds part of what the
+answer is built from — is the right bar: at 3 the surviving anchors are too few and
+their neighbourhoods miss the rest of the statement. And each corpus needs the window
+its chunks imply: ±1 on 1024-token chunks, ±4 on 256-token ones, for a context four
+times more fragmented and 4 points less complete.
+
+These are measures of what reaches the prompt, not of answers. The generation rows
+below show the two do not always move together.
+
 ### Generation
 
 End-to-end generation quality on the 150 QA (corpus `docling_hybrid_1024_bge-m3`,
@@ -112,9 +149,10 @@ answer is read in full and compared with the gold on two independent axes:
   invented figures or unjustified assumptions;
 - **equivalent** = correct **and** grounded, the headline metric;
 - **Prometheus**: mean 1–5 score from the open Prometheus-2 judge on its verbatim
-  Absolute Grading rubric, run locally. It is validated to rank systems the same way
-  (Spearman ρ = 0.93, [ADR 0003](docs/adr/0003-prometheus-judge.md)); read it as a
-  ranking, not as an absolute grade.
+  Absolute Grading rubric, run locally. It ranks our ten rows almost exactly as
+  `equivalent` does (Spearman ρ = 0.96, against 0.93 on the four models of
+  [ADR 0003](docs/adr/0003-prometheus-judge.md)); read it as a ranking, not as an
+  absolute grade.
 
 Our rows are judged by Claude on the correct / grounded protocol. The FinanceBench
 rows are the answers published with the benchmark for its `singleStore` setting (one
@@ -152,6 +190,15 @@ the context window's; [ADR 0004](docs/adr/0004-crag-workflow-evidence-grid.md)
 compares them at equal window. It costs about 20 LLM calls per question instead of
 one.
 
+Prometheus scores a refusal 1, so it reads caution as failure. On our ten rows it
+agrees with `correct` at ρ = 0.94; add the three published rows and the agreement over
+the thirteen falls to 0.74, because that is where refusals concentrate.
+llama-2-70b-chat refuses 7 times and answers wrongly 81, yet outranks both GPT-4 rows
+on Prometheus (3.75 against 3.39 and 2.71) while being correct less often (37.3 against
+48.0 and 41.3); those two refuse 58 and 71 times out of 150.
+Compare Prometheus within a family of rows that refuse at a similar rate, not across
+the whole table.
+
 Key finding: **useful retrieval depth scales with model capability** — the
 k10→k20 step only helps the strongest models (flat for the 3B tier). See ADR 0002.
 
@@ -171,25 +218,32 @@ together place the answer in one of five outcomes:
 - **Hallucinating**: wrong, and the gold evidence never reached the prompt.
 - **Don't know**: refusal.
 
-The verdicts behind this table are Claude's. `make judge` reproduces the grid with a
-local judge, `qwen3.5:9b`, validated against those verdicts on runs held out from
-prompt tuning (kappa 0.81 on correct): the two judges agree on the ranking of the
-best row, but a gap of fewer than about 5 good jobs between two rows is within their
-disagreement and should not be read as a difference. Full grid, per-question
-transitions, failure analysis and the judge validation are in
-[ADR 0004](docs/adr/0004-crag-workflow-evidence-grid.md).
+Every row below is judged by the same local judge, `qwen3.5:9b`, validated against
+Claude's verdicts on runs held out from prompt tuning (kappa 0.81 on correct). A gap of
+fewer than about 5 good jobs is within the judges' disagreement and should not be read
+as a difference. *Evidence* is the share of questions whose context holds every figure
+the gold answer is built from. Full grid, per-question transitions and the judge
+validation are in [ADR 0004](docs/adr/0004-crag-workflow-evidence-grid.md); the
+selection rows are [ADR 0005](docs/adr/0005-context-selection-expansion.md).
 
-| Workflow row | Good job | Unverified | Hallucinating | Need help | Don't know | Evidence in prompt | Latency / Q | LLM calls / Q |
-|---|---|---|---|---|---|---|---|---|
-| `num_ctx` 12288 (~10 passages) | 73 | 13 | 25 | 16 | 23 | 93 | 107 s | 1 |
-| `num_ctx` 12288 (grading 0–3 + floor of 3) | 74 | 14 | 26 | 14 | 22 | 92 | 161 s | 20.9 |
-| **`num_ctx` 24576 (~20 passages)** | **79** | 13 | **17** | 22 | **19** | **105** | 187 s | 1 |
+| Workflow row | `num_ctx` | Tokens read | Good job | Unverified | Hallucinating | Need help | Don't know | Evidence | Latency / Q | LLM calls / Q |
+|---|---|---|---|---|---|---|---|---|---|---|
+| top-20, no selection | 24576 | 14340 | **77** | 13 | 16 | 23 | 21 | 56.1% | 187 s | 1 |
+| **grade ≥ 2 + window ±1** | **12288** | **6314** | **74** | 18 | 18 | 15 | 25 | **56.8%** | 136 s | 21 |
+| top-20, no selection | 12288 | 7593 | 72 | 15 | 22 | 17 | 24 | 43.9% | 107 s | 1 |
+| grade ≥ 2, no window | 12288 | 4048 | 68 | 15 | 23 | 18 | 26 | 44.6% | 161 s | 21 |
 
-Key finding: the larger window is the best row, but only 4 of its 16 gains over
-the 12K window come from newly retrieved evidence. The rest reflect how
-sensitive generation is to the surrounding context. With more evidence in
-context, failures shift from *hallucinating* to *need help*: the generator,
-not the retrieval, is now the bottleneck on those questions.
+Key finding: **reading the neighbourhood of a selected passage is worth more than
+reading twice as much text.** Grading alone loses 4 good jobs against no selection at
+all; widening each survivor by one chunk wins 6 back, and 9 of those 12 gains come from
+questions the grader had already retrieved correctly but the generator got wrong — a
+statement cut across two chunks, of which only one was kept. The row ends within the
+judges' noise of a 24K window while reading 56% fewer tokens, which is what a context
+window costs in VRAM when serving.
+
+The remaining failures are no longer about retrieval depth. On the 22 questions whose
+wording carries its own formula, 12 now have every input in context, and 8 of those are
+answered correctly: what is left is arithmetic, not search.
 
 ---
 

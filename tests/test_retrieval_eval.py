@@ -3,7 +3,12 @@
 from pathlib import Path
 
 from src.evaluation.retrieval.config import load_retrieval_eval_config
-from src.evaluation.retrieval.coverage import evidence_coverage, numbers
+from src.evaluation.retrieval.coverage import (
+    evidence_coverage,
+    key_figures,
+    ngrams,
+    numbers,
+)
 from src.evaluation.retrieval.evaluate import aggregate, coverage_qa, dedup_relevances, score_qa
 from src.evaluation.run_retrieval import report_path
 from src.ingestion.schema import Chunk
@@ -62,9 +67,36 @@ def test_evidence_coverage_reads_the_figures_not_the_page():
     assert full["evidence_numbers"] == full["all_evidence_numbers"] == 1.0
 
 
+def test_key_figures_drop_years_and_small_counts():
+    """A page is full of millésimes and small counts that match by coincidence."""
+    assert key_figures("Accounts payable 2019 = 34,616. 7 segments, shares 2.2, total 93") == {
+        "34616",
+        "2.2",
+    }
+
+
+def test_span_overlap_needs_the_sequence_not_the_vocabulary():
+    """The 5-gram measure is what separates a real quote from shared words."""
+    evidence = ["the company repurchased 722,457 shares of its common stock"]
+    quoted = evidence_coverage(f"note 7 {evidence[0]} during the quarter", evidence)
+    shuffled = evidence_coverage(
+        "shares 722,457 common stock company the of its repurchased", evidence
+    )
+    assert quoted["evidence_overlap"] == 1.0
+    assert shuffled["evidence_overlap"] == 0.0
+    # The looser word measure cannot tell them apart.
+    assert shuffled["evidence_words"] == 1.0
+
+
+def test_ngrams_are_ordered_windows_of_the_text():
+    assert ngrams("a b c d e f", n=5) == {("a", "b", "c", "d", "e"), ("b", "c", "d", "e", "f")}
+    assert ngrams("too short", n=5) == set()
+
+
 def test_evidence_without_numbers_does_not_count_as_covered():
     cov = evidence_coverage("anything", ["Revenue grew on higher volumes"])
     assert cov["evidence_numbers"] is None and cov["all_evidence_numbers"] is None
+    assert cov["evidence_figures"] is None and cov["all_evidence_figures"] is None
 
 
 def test_coverage_at_k_reads_only_the_top_k_passages():
@@ -85,7 +117,7 @@ def test_report_is_named_after_the_config():
 
 def test_every_shipped_retrieval_config_loads():
     configs = sorted(Path("configs/evaluation/retrieval").glob("*.yaml"))
-    assert len(configs) == 13
+    assert len(configs) == 14
     for path in configs:
         cfg = load_retrieval_eval_config(str(path))
         assert cfg.doc_scoped

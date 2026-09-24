@@ -34,6 +34,10 @@ def _out_path(context_path: str, window: int) -> Path:
 
 def run(context_path: str, chunks_path: str, window: int, out_path: Path | None = None) -> Path:
     corpus = {c.chunk_id: c for c in read_chunks(chunks_path)}
+    # Files written before passages carried their corpus id are still usable: a stored
+    # passage is the chunk's text verbatim, and chunk texts are unique in a corpus, so
+    # the id is recovered by lookup rather than by re-running the retriever.
+    by_text = {c.text: c.chunk_id for c in corpus.values()}
     out_path = out_path or _out_path(context_path, window)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -46,7 +50,7 @@ def run(context_path: str, chunks_path: str, window: int, out_path: Path | None 
             record = json.loads(line)
             selection = [
                 Chunk(
-                    chunk_id=s.get("chunk_id", ""),
+                    chunk_id=s.get("chunk_id") or by_text.get(s["text"], ""),
                     doc_id=s["doc_id"],
                     page=s["page"],
                     text=s["text"],
