@@ -2,9 +2,8 @@
 
 ## Statut
 
-Accepté **côté récupération** (ce qui atteint le prompt). La conversion en qualité
-de réponse n'est établie que pour le corpus 256 ; la ligne retenue sur le corpus 1024
-reste à juger — voir « Ce qui n'est pas tranché ».
+Accepté. La configuration retenue a été exécutée et jugée le 2026-09-24 : **74 good_job**
+contre 68 pour le grader seul, en lisant 6 314 tokens. Voir « Validation ».
 
 ## Contexte
 
@@ -130,30 +129,42 @@ d'hallucinations. Le modèle devient prudent quand le contexte est morcelé.
 5. **`max_tokens` reste à 1024.** Une réponse sur six dépasse 512 tokens ; la réserve
    n'est pas surdimensionnée.
 
+## Validation
+
+Exécution et jugement de la configuration retenue, juge `qwen3.5:9b` (ADR 0004) :
+
+| ligne | appels / Q | tokens lus | latence | complètes | good_job | dk | halluc. | need_help |
+|---|---|---|---|---|---|---|---|---|
+| advanced k20, 24K | 1 | 14 340 | 187 s | 56,1 % | 77 | 21 | 16 | 23 |
+| **grading ±1, 12K** | 21 | **6 314** | 136 s | **56,8 %** | **74** | 25 | 18 | 15 |
+| advanced k20, 12K | 1 | 7 593 | 107 s | 43,9 % | 72 | 24 | 22 | 17 |
+| grading ±0, 12K | 21 | 4 048 | 161 s | 44,6 % | 68 | 26 | 23 | 18 |
+| grading 256 ±3, 12K | 21 | 5 120 | 117 s | 48,2 % | 72 | 32 | 16 | 15 |
+
+**La prédiction du balayage s'est vérifiée au chiffre près** : 6 314 tokens lus, 64
+questions tronquées, 56,8 % de complétude — les trois annoncés sans générer.
+
+**L'expansion paie sur le grader : 68 → 74** (+12 gagnées, −6 perdues), et **9 des 12
+gains viennent de `need_help`** : des questions dont l'evidence était déjà récupérée mais
+que le générateur ratait, faute d'avoir le tableau entier. C'est le mécanisme visé.
+
+**Contre les deux lignes sans sélection, rien n'est tranché** : +2 sur `advanced 12K`,
+−3 sur `advanced 24K`, tous deux sous le seuil de ~5 good_job du juge. Ce qui est réel
+est le contexte : **56 % de tokens en moins que la ligne 24K pour 3 good_job d'écart**.
+Le coût reste 21 appels contre 1, et 136 s contre 107 s.
+
+**Décision de lecture** : la ligne est retenue pour une cible sous contrainte de VRAM,
+où le contexte lu est le poste dimensionnant. Elle ne remplace pas `advanced 12K` lorsque
+le nombre d'appels prime.
+
 ## Ce qui n'est pas tranché
-
-**La couverture n'est pas la qualité.** Les lignes jugées (juge `qwen3.5:9b`, ADR 0004)
-le montrent :
-
-| ligne | tokens lus | complètes | good_job |
-|---|---|---|---|
-| advanced 1024, 24K | 14 340 | 56,1 % | 77 |
-| advanced 1024, 12K | 7 593 | 43,9 % | 72 |
-| grading 256 ±3, 12K | 5 120 | 48,2 % | 72 |
-| grading 256 ±6, 12K | 6 862 | 53,2 % | 71 |
-| grading 256 ±0, 12K | 1 285 | 23,0 % | 63 |
-
-L'expansion répare bien le grader (63 → 72, +12 questions gagnées, −3 perdues, les gains
-venant de `need_help` et `dont_know`). Mais sur le corpus 256, la ligne la plus couvrante
-n'est pas la meilleure au juge, et `grading ±3` ne fait qu'égaler `advanced 12K` pour
-**21 appels LLM contre 1**.
-
-Reste donc à juger la configuration retenue (corpus 1024, ±1) et à décider si son surcoût
-d'appels se justifie. Un écart de moins de ~5 good_job n'étant pas tranché par le juge
-(ADR 0004), la question se posera aussi en latence et en coût, pas seulement en score.
 
 **Le corpus 512 n'a pas de run du grader**, donc il n'apparaît qu'au seuil 0. Vu la
 domination du 1024, l'ablation n'a pas été jugée prioritaire.
+
+**Le surcoût d'appels n'est pas amorti par le score** : à ±2 good_job près, `advanced 12K`
+fait le même travail avec un seul appel. La ligne retenue se justifie par le contexte lu,
+pas par la qualité mesurée.
 
 ## Conséquences
 
@@ -169,7 +180,12 @@ domination du 1024, l'ablation n'a pas été jugée prioritaire.
   nom du fichier : une profondeur de présélection différente est une autre récupération,
   pas une tranche plus profonde de la même.
 - Le README documente le tableau « What fits a 12K window ».
-- **À mesurer ensuite** : la ligne retenue jugée de bout en bout ; l'effet de la
-  fragmentation à couverture égale ; et la piste calculatoire, puisque aucune
-  configuration ne débloque les 22 questions à formule (6 à 9 bonnes réponses sur 22
-  partout), ce qui montre que la récupération n'y est plus le facteur limitant.
+- **Sur les 22 questions dont l'énoncé porte la formule** : 12 ont désormais toutes les
+  grandeurs de la formule dans le contexte, et **8 d'entre elles sont correctement
+  répondues**. Les 10 autres échouent encore par contexte incomplet (6 refus, 3
+  hallucinations, 1 `need_help`), dont trois par un piège d'extraction relevé à la
+  lecture : valeurs du tableau de flux au lieu des soldes du bilan, revenus par segment
+  au lieu des consolidés, montants trimestriels au lieu d'annuels.
+- **À mesurer ensuite** : la voie calculatoire sur les 12 questions au contexte complet —
+  4 y échouent encore alors que toutes les grandeurs sont présentes, ce qui en fait un
+  problème d'arithmétique et non de récupération.

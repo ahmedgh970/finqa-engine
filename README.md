@@ -218,25 +218,32 @@ together place the answer in one of five outcomes:
 - **Hallucinating**: wrong, and the gold evidence never reached the prompt.
 - **Don't know**: refusal.
 
-The verdicts behind this table are Claude's. `make judge` reproduces the grid with a
-local judge, `qwen3.5:9b`, validated against those verdicts on runs held out from
-prompt tuning (kappa 0.81 on correct): the two judges agree on the ranking of the
-best row, but a gap of fewer than about 5 good jobs between two rows is within their
-disagreement and should not be read as a difference. Full grid, per-question
-transitions, failure analysis and the judge validation are in
-[ADR 0004](docs/adr/0004-crag-workflow-evidence-grid.md).
+Every row below is judged by the same local judge, `qwen3.5:9b`, validated against
+Claude's verdicts on runs held out from prompt tuning (kappa 0.81 on correct). A gap of
+fewer than about 5 good jobs is within the judges' disagreement and should not be read
+as a difference. *Evidence* is the share of questions whose context holds every figure
+the gold answer is built from. Full grid, per-question transitions and the judge
+validation are in [ADR 0004](docs/adr/0004-crag-workflow-evidence-grid.md); the
+selection rows are [ADR 0005](docs/adr/0005-context-selection-expansion.md).
 
-| Workflow row | Good job | Unverified | Hallucinating | Need help | Don't know | Evidence in prompt | Latency / Q | LLM calls / Q |
-|---|---|---|---|---|---|---|---|---|
-| `num_ctx` 12288 (~10 passages) | 73 | 13 | 25 | 16 | 23 | 93 | 107 s | 1 |
-| `num_ctx` 12288 (grading 0–3 + floor of 3) | 74 | 14 | 26 | 14 | 22 | 92 | 161 s | 20.9 |
-| **`num_ctx` 24576 (~20 passages)** | **79** | 13 | **17** | 22 | **19** | **105** | 187 s | 1 |
+| Workflow row | `num_ctx` | Tokens read | Good job | Unverified | Hallucinating | Need help | Don't know | Evidence | Latency / Q | LLM calls / Q |
+|---|---|---|---|---|---|---|---|---|---|---|
+| top-20, no selection | 24576 | 14340 | **77** | 13 | 16 | 23 | 21 | 56.1% | 187 s | 1 |
+| **grade ≥ 2 + window ±1** | **12288** | **6314** | **74** | 18 | 18 | 15 | 25 | **56.8%** | 136 s | 21 |
+| top-20, no selection | 12288 | 7593 | 72 | 15 | 22 | 17 | 24 | 43.9% | 107 s | 1 |
+| grade ≥ 2, no window | 12288 | 4048 | 68 | 15 | 23 | 18 | 26 | 44.6% | 161 s | 21 |
 
-Key finding: the larger window is the best row, but only 4 of its 16 gains over
-the 12K window come from newly retrieved evidence. The rest reflect how
-sensitive generation is to the surrounding context. With more evidence in
-context, failures shift from *hallucinating* to *need help*: the generator,
-not the retrieval, is now the bottleneck on those questions.
+Key finding: **reading the neighbourhood of a selected passage is worth more than
+reading twice as much text.** Grading alone loses 4 good jobs against no selection at
+all; widening each survivor by one chunk wins 6 back, and 9 of those 12 gains come from
+questions the grader had already retrieved correctly but the generator got wrong — a
+statement cut across two chunks, of which only one was kept. The row ends within the
+judges' noise of a 24K window while reading 56% fewer tokens, which is what a context
+window costs in VRAM when serving.
+
+The remaining failures are no longer about retrieval depth. On the 22 questions whose
+wording carries its own formula, 12 now have every input in context, and 8 of those are
+answered correctly: what is left is arithmetic, not search.
 
 ---
 
