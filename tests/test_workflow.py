@@ -8,10 +8,12 @@ from pathlib import Path
 import pytest
 
 from src.ingestion.schema import Chunk
+from src.llm.prompts import build_prompt
 from src.retrieval.base import ScoredChunk
 from src.workflow.config import WorkflowConfig, load_workflow_config, variant_name
 from src.workflow.expansion import expand
 from src.workflow.graph import answer_workflow
+from src.workflow.schemas import CalcSpec, CalcVariable
 
 
 class FakeRetriever:
@@ -340,3 +342,87 @@ def test_an_explicit_name_files_a_replayed_selection_under_its_own_cell():
     replayed = _config(name="grading_pm6")
     assert variant_name(replayed) == "grading_pm6"
     assert variant_name(_config()) == "advanced"
+
+
+def _calc_config(**overrides):
+    return _config(k=2, calculator={"enabled": True}, **overrides)
+
+
+RATIO_Q = (
+    "What is the FY2024 current ratio for Acme? Current ratio is defined as: total "
+    "current assets / total current liabilities. Round your answer to two decimal places."
+)
+RATIO_PASSAGE = (
+    "ACME CORP BALANCE SHEETS (In Millions) Total current assets, December 31, 2024 = "
+    "1,250.7. Total current liabilities, December 31, 2024 = 890.4."
+)
+
+
+def _spec(tca_line: int = 1) -> CalcSpec:
+    # Rows of RATIO_PASSAGE: L1 total current assets, L2 total current liabilities.
+    return CalcSpec(
+        expression="tca / tcl",
+        variables=[
+            CalcVariable(name="tca", term="total current assets", line=tca_line),
+            CalcVariable(name="tcl", term="total current liabilities", line=2),
+        ],
+    )
+
+
+def test_a_verified_figure_reaches_the_generator_and_is_recorded(monkeypatch):
+    captured: dict[str, str] = {}
+    monkeypatch.setattr("src.workflow.nodes.generate_structured", lambda *a, **k: _spec())
+    monkeypatch.setattr(
+        "src.workflow.nodes.generate",
+        lambda prompt, config: captured.setdefault("prompt", prompt) and "" or "The ratio is 1.40.",
+    )
+    retriever = FakeRetriever([Chunk(chunk_id="c0", doc_id="DOC", page=1, text=RATIO_PASSAGE)])
+
+    result = answer_workflow(RATIO_Q, retriever, _calc_config(), doc_id="DOC")
+
+    assert result.is_numeric and result.computed == "1.40"
+    assert "1.40" in captured["prompt"]  # injected, not merely computed
+    assert result.computed_used is True
+    assert result.llm_calls == 2  # one structured extraction, one generation
+
+
+def test_a_failed_check_leaves_the_generator_untouched(monkeypatch):
+    """The tool may lose an opportunity; it must never change a prompt it cannot back."""
+    # A line the context does not have: the check has to stop it before the prompt.
+    invented = _spec(tca_line=99)
+    captured: dict[str, str] = {}
+    monkeypatch.setattr("src.workflow.nodes.generate_structured", lambda *a, **k: invented)
+    monkeypatch.setattr(
+        "src.workflow.nodes.generate",
+        lambda prompt, config: captured.setdefault("prompt", prompt) and "" or "answer",
+    )
+    retriever = FakeRetriever([Chunk(chunk_id="c0", doc_id="DOC", page=1, text=RATIO_PASSAGE)])
+
+    result = answer_workflow(RATIO_Q, retriever, _calc_config(), doc_id="DOC")
+
+    assert result.computed is None and "does not exist" in result.calc_error
+    assert "calculation tool" not in captured["prompt"]
+    assert build_prompt(RATIO_Q, result.sources) == captured["prompt"]  # the baseline prompt
+
+
+def test_a_question_without_a_formula_never_reaches_the_calculator(monkeypatch):
+    monkeypatch.setattr(
+        "src.workflow.nodes.generate_structured",
+        lambda *a, **k: pytest.fail("the calculator must not run on a non-computational question"),
+    )
+    monkeypatch.setattr("src.workflow.nodes.generate", lambda prompt, config: "answer")
+    retriever = FakeRetriever([Chunk(chunk_id="c0", doc_id="DOC", page=1, text=RATIO_PASSAGE)])
+
+    result = answer_workflow("Which segment grew the most in 2022?", retriever, _calc_config())
+
+    assert result.is_numeric is False and result.computed is None and result.llm_calls == 1
+
+
+def test_the_calculator_row_differs_from_the_reference_row_by_one_switch():
+    """Attribution rests on this: the tool's effect must not be mixed with a context change."""
+    base = load_workflow_config("configs/workflow/grade_exp1_1024_replayed.yaml").model_dump()
+    with_calc = load_workflow_config(
+        "configs/workflow/grade_exp1_calc_1024_replayed.yaml"
+    ).model_dump()
+    assert {k for k in base if base[k] != with_calc[k]} == {"name", "calculator"}
+    assert with_calc["calculator"]["enabled"] and not base["calculator"]["enabled"]

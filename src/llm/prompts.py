@@ -20,11 +20,27 @@ Question: {question}
 
 Answer:"""
 
+_VERIFIED = """A calculation tool has computed this answer from the context and checked every value it used against the passages: {verified}
+
+Use this exact figure as your final answer. If it contradicts your own reading, still report it: the values behind it were verified line by line.
+
+"""
+
 
 def _format_context(chunks: list[Chunk]) -> str:
     return "\n\n".join(f"[Source {i + 1}] {c.text}" for i, c in enumerate(chunks))
 
 
-def build_prompt(question: str, chunks: list[Chunk]) -> str:
-    """Assemble a grounded QA prompt from the question and its retrieved chunks."""
-    return _TEMPLATE.format(context=_format_context(chunks), question=question)
+def build_prompt(question: str, chunks: list[Chunk], verified: str | None = None) -> str:
+    """Assemble a grounded QA prompt from the question and its retrieved chunks.
+
+    ``verified`` carries a figure a calculation tool produced and checked against those
+    same passages. It is presented as established rather than suggested, because the
+    failure it exists to prevent is the model recomputing it and drifting. With no
+    figure the prompt is byte-identical to the baseline's, which is what keeps the
+    ablation rows comparable.
+    """
+    prompt = _TEMPLATE.format(context=_format_context(chunks), question=question)
+    if verified is None:
+        return prompt
+    return prompt.replace("Question: ", _VERIFIED.format(verified=verified) + "Question: ")

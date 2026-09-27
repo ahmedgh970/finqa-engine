@@ -37,8 +37,10 @@ class CragState(TypedDict, total=False):
     expanded: list[Chunk]  # the selection widened to the chunks around each passage
 
     # Numeric path
-    is_numeric: bool
-    computed: str | None
+    is_numeric: bool  # the question states a computation the tool can verify
+    computed: str | None  # the verified figure, None when the tool declined
+    calc_error: str | None  # why it declined, kept for offline analysis
+    computed_used: bool  # whether the generator kept the figure it was given
 
     # Output
     answer: str

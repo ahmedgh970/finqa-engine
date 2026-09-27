@@ -17,10 +17,17 @@ from src.llm.client import (
 )
 from src.llm.prompts import build_prompt
 from src.retrieval.base import Retriever
+from src.workflow.calculator import (
+    CalculationError,
+    answer_format,
+    compute,
+    routes_to_calculator,
+    rows_of,
+)
 from src.workflow.config import WorkflowConfig
 from src.workflow.expansion import expand
-from src.workflow.prompts import build_grading_prompt
-from src.workflow.schemas import ChunkGrade
+from src.workflow.prompts import build_calc_prompt, build_grading_prompt
+from src.workflow.schemas import CalcSpec, ChunkGrade
 from src.workflow.state import CragState
 
 
@@ -133,6 +140,68 @@ def make_expand(config: WorkflowConfig):
     return expand_node
 
 
+def _selected(state: CragState) -> list[Chunk]:
+    """The passages the graph has settled on so far, whichever nodes produced them."""
+    for key in ("expanded", "graded"):
+        chosen = state.get(key)
+        if chosen is not None:
+            return chosen
+    return state["chunks"]
+
+
+def make_route():
+    """Decide, from the wording alone, whether a computation can be set up and checked.
+
+    A node rather than a bare conditional edge, so the decision is recorded in the state
+    and ends up in the answers file: a row's calculator coverage is then readable
+    offline instead of requiring a re-run to observe.
+    """
+
+    def route(state: CragState) -> dict:
+        started = time.perf_counter()
+        return {
+            "is_numeric": routes_to_calculator(state["question"]),
+            "node_latencies": _timed(state, "route", started),
+        }
+
+    return route
+
+
+def make_calculate(config: WorkflowConfig):
+    """Ask for the computation the question defines, verify it, then evaluate it.
+
+    One structured call. The model never computes, never copies a figure and never writes
+    code that runs: it states the expression and points to the table rows holding its
+    inputs, the code reads and checks each row, and the arithmetic happens in exact
+    decimal. Anything
+    that fails a check leaves ``computed`` empty and the generator answers as it would
+    have without the tool -- the tool can lose an opportunity, never cause a wrong
+    answer.
+    """
+
+    def calculate(state: CragState) -> dict:
+        started = time.perf_counter()
+        chunks = _fit_context(_selected(state), state["question"], config)
+        result: dict = {
+            "computed": None,
+            "calc_error": None,
+            "llm_calls": state.get("llm_calls", 0) + 1,
+        }
+        try:
+            rows = rows_of(chunks)
+            spec = generate_structured(
+                build_calc_prompt(state["question"], rows), config.llm, CalcSpec
+            )
+            calculation = compute(spec, rows, state["question"])
+            result["computed"] = calculation.rendered(*answer_format(state["question"]))
+        except (CalculationError, StructuredOutputError) as exc:
+            result["calc_error"] = str(exc)
+        result["node_latencies"] = _timed(state, "calculate", started)
+        return result
+
+    return calculate
+
+
 def _fit_context(chunks: list[Chunk], question: str, config: WorkflowConfig) -> list[Chunk]:
     """Drop the lowest-ranked passages until the prompt fits the pinned context.
 
@@ -164,19 +233,18 @@ def make_generate(config: WorkflowConfig):
 
     def generate_node(state: CragState) -> dict:
         started = time.perf_counter()
-        expanded = state.get("expanded")
-        graded = state.get("graded")
-        selected = (
-            expanded
-            if expanded is not None
-            else (graded if graded is not None else state["chunks"])
-        )
+        selected = _selected(state)
         sources = _fit_context(selected, state["question"], config)
-        text = generate(build_prompt(state["question"], sources), config.llm)
+        computed = state.get("computed")
+        text = generate(build_prompt(state["question"], sources, verified=computed), config.llm)
         return {
             "answer": text,
             "sources": sources,
             "n_dropped_to_fit": len(selected) - len(sources),
+            # A verified figure handed to the generator can still be dropped or reworded
+            # on its way into the answer, so whether it survived is recorded rather than
+            # assumed.
+            "computed_used": bool(computed) and computed.strip("%") in text,
             "llm_calls": state.get("llm_calls", 0) + 1,
             "node_latencies": _timed(state, "generate", started),
         }
