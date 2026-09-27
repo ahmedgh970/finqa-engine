@@ -53,13 +53,19 @@ def _patch_llm(monkeypatch, grades: list[int], answer: str = "generated answer")
     monkeypatch.setattr("src.workflow.nodes.generate", lambda prompt, config: answer)
 
 
-def test_variant_name_covers_the_ablation_matrix():
+def test_variant_name_reads_as_the_pipeline_it_switches_on():
     assert variant_name(_config()) == "advanced"
-    assert variant_name(_config(grading={"enabled": True})) == "grading"
+    assert variant_name(_config(grading={"enabled": True})) == "grade"
     assert variant_name(_config(calculator={"enabled": True})) == "calc"
     assert (
-        variant_name(_config(grading={"enabled": True}, calculator={"enabled": True}))
-        == "grading_calc"
+        variant_name(
+            _config(
+                grading={"enabled": True},
+                expansion={"enabled": True, "window": 1},
+                calculator={"enabled": True},
+            )
+        )
+        == "grade_exp1_calc"
     )
 
 
@@ -67,7 +73,7 @@ def test_shipped_configs_share_one_retrieval_and_differ_by_one_switch():
     """Attribution rests on this: the rows must differ by the node under test alone."""
     rows = {
         name: load_workflow_config(f"configs/workflow/{file}.yaml")
-        for name, file in (("advanced", "advanced"), ("grading", "grading_1024"))
+        for name, file in (("advanced", "advanced"), ("grade", "grade_1024"))
     }
     # Same retrieval, replayed from the same file, so passages are byte-identical.
     assert {c.retriever for c in rows.values()} == {"replay"}
@@ -75,7 +81,7 @@ def test_shipped_configs_share_one_retrieval_and_differ_by_one_switch():
     assert {c.k for c in rows.values()} == {20}
 
     assert variant_name(rows["advanced"]) == "advanced"
-    assert variant_name(rows["grading"]) == "grading" and rows["grading"].grading.min_chunks == 3
+    assert variant_name(rows["grade"]) == "grade" and rows["grade"].grading.min_chunks == 3
 
 
 def test_disabled_grading_reduces_the_graph_to_retrieve_then_generate(monkeypatch):
@@ -231,7 +237,7 @@ def test_a_single_oversized_passage_still_reaches_the_prompt(monkeypatch):
 def test_output_file_names_the_pinned_context_window():
     import src.workflow.runner as runner_mod
 
-    stem = "workflow_grading_reranked_test_collection_ollama_chat_granite4.1:8b_k20"
+    stem = "workflow_grade_reranked_test_collection_ollama_chat_granite4.1:8b_k20"
     cfg = _config(k=20, grading={"enabled": True}, llm={"model": "ollama_chat/granite4.1:8b"})
     assert runner_mod._output_path(cfg).name == f"{stem}.jsonl"  # window sized per prompt
     assert runner_mod._output_path(cfg).parent == Path("data/processed/answers/workflow")
@@ -243,8 +249,8 @@ def test_output_file_names_the_pinned_context_window():
 
 
 def test_the_chunk_size_row_differs_from_the_grading_row_by_its_corpus_alone():
-    base = load_workflow_config("configs/workflow/grading_1024.yaml").model_dump()
-    small = load_workflow_config("configs/workflow/grading_256.yaml").model_dump()
+    base = load_workflow_config("configs/workflow/grade_1024.yaml").model_dump()
+    small = load_workflow_config("configs/workflow/grade_256.yaml").model_dump()
     corpus = {"chunks_path", "collection_name", "replay_path"}
     assert {k for k in base if base[k] != small[k]} == corpus
     assert "256" in small["collection_name"] and "256" in small["replay_path"]
@@ -324,9 +330,9 @@ def test_the_expansion_node_widens_what_the_generator_reads(monkeypatch, tmp_pat
 
 
 def test_the_expansion_window_names_the_ablation_cell():
-    assert variant_name(_config(grading={"enabled": True})) == "grading"
+    assert variant_name(_config(grading={"enabled": True})) == "grade"
     widened = _config(grading={"enabled": True}, expansion={"enabled": True, "window": 6})
-    assert variant_name(widened) == "grading_pm6"
+    assert variant_name(widened) == "grade_exp6"
 
 
 def test_an_explicit_name_files_a_replayed_selection_under_its_own_cell():

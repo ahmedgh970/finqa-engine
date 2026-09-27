@@ -2,9 +2,9 @@
 # One config for every answers file: pick them with ANSWERS= (several files or a glob),
 # the critic with MODEL=, a subset with LIMIT= (Ragas makes ~4 LLM calls per question).
 #   make ragas LIMIT=50
-#   make ragas ANSWERS='data/processed/answers/naif_rag/*_k10.jsonl' LIMIT=50
+#   make ragas ANSWERS='data/processed/answers/naive/*_k10.jsonl' LIMIT=50
 # Default run: the naive pipeline, reranked(dense) -> granite4.1:8b at k10.
-answers_path: data/processed/answers/naif_rag/reranked_docling_hybrid_1024_bge-m3_ollama_chat_granite4.1:8b_k10.jsonl
+answers_path: data/processed/answers/naive/reranked_docling_hybrid_1024_bge-m3_ollama_chat_granite4.1:8b_k10.jsonl
 llm:
   # mistral-nemo (12B) handles answer_relevancy's structured output where an 8B critic fails.
   model: ollama_chat/mistral-nemo

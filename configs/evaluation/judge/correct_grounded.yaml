@@ -2,9 +2,9 @@
 # equivalent = correct AND grounded. Any instruction-following Ollama model can judge;
 # switch it with MODEL= (its verdicts then go to their own ..._judged_by_<model> file).
 #   make judge PROTOCOL=correct_grounded
-#   make judge PROTOCOL=correct_grounded ANSWERS=data/processed/answers/naif_rag/<run>.jsonl MODEL=ollama_chat/qwen3.5:9b
+#   make judge PROTOCOL=correct_grounded ANSWERS=data/processed/answers/naive/<run>.jsonl MODEL=ollama_chat/qwen3.5:9b
 # Default run: the naive pipeline, reranked(dense) -> granite4.1:8b at k20 (ADR 0002's best row).
-answers_path: data/processed/answers/naif_rag/reranked_docling_hybrid_1024_bge-m3_ollama_chat_granite4.1:8b_k20.jsonl
+answers_path: data/processed/answers/naive/reranked_docling_hybrid_1024_bge-m3_ollama_chat_granite4.1:8b_k20.jsonl
 protocol: correct_grounded
 llm:
   model: ollama_chat/llama3.1:8b

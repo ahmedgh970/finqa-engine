@@ -8,7 +8,7 @@ ids already scored are skipped, so an interrupted run continues where it stopped
 Usage:
     python -m src.evaluation.run_ragas --config configs/evaluation/ragas/ragas.yaml
     python -m src.evaluation.run_ragas --config configs/evaluation/ragas/ragas.yaml \
-        --answers data/processed/answers/naif_rag/*_k10.jsonl --limit 50
+        --answers data/processed/answers/naive/*_k10.jsonl --limit 50
     python -m src.evaluation.run_ragas --config configs/evaluation/ragas/ragas.yaml \
         --model ollama_chat/llama3.1:8b --id financebench_id_03029
 """

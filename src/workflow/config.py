@@ -96,11 +96,14 @@ def variant_name(config: WorkflowConfig) -> str:
     """
     if config.name:
         return config.name
-    name = {
-        (False, False): "advanced",
-        (True, False): "grading",
-        (False, True): "calc",
-        (True, True): "grading_calc",
-    }[(config.grading.enabled, config.calculator.enabled)]
-    # The expansion window changes what the generator reads, so it belongs to the cell.
-    return f"{name}_pm{config.expansion.window}" if config.expansion.enabled else name
+    # One part per node the config switches on, in the order the graph runs them, so the
+    # name reads as the pipeline: grade_exp1_calc grades, widens by one chunk, computes.
+    # The window is part of the name because it changes what the generator reads, the
+    # same reason the pinned context window is part of the filename.
+    parts = [
+        *(["grade"] if config.grading.enabled else []),
+        *([f"exp{config.expansion.window}"] if config.expansion.enabled else []),
+        *(["calc"] if config.calculator.enabled else []),
+    ]
+    # No node enabled is the baseline the other rows are measured against.
+    return "_".join(parts) if parts else "advanced"

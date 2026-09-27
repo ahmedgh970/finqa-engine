@@ -8,7 +8,7 @@ on a gold page are flagged. Meant to be read question by question, never truncat
 
     uv run python scripts/judge_view.py --start 1 --count 150 \
         --answers advanced=data/processed/answers/workflow/workflow_advanced_..._24kc.jsonl \
-        --answers grading=data/processed/answers/workflow/workflow_grading_..._12kc.jsonl \
+        --answers grade=data/processed/answers/workflow/workflow_grade_..._12kc.jsonl \
         --out-dir /tmp/views
 """
 
