@@ -40,6 +40,7 @@ class CragState(TypedDict, total=False):
     is_numeric: bool  # the question states a computation the tool can verify
     computed: str | None  # the verified figure, None when the tool declined
     calc_error: str | None  # why it declined, kept for offline analysis
+    calculation: dict  # the expression and the row behind each input, for inspection
     computed_used: bool  # whether the generator kept the figure it was given
 
     # Output

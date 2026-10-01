@@ -31,7 +31,7 @@ flowchart LR
     Embed --> Q[(Qdrant)]
   end
   subgraph Serving["Serving (online, 100% local)"]
-    UI[UI · Gradio] -->|POST /ask| API[API · FastAPI]
+    UI[UI · web, live workflow diagram] -->|POST /demo/run| API[API · FastAPI]
     API --> R[Retrieve · dense · prefetch 50]
     R --> Q
     R --> RR[Rerank · cross-encoder · top-20]
@@ -324,27 +324,44 @@ make ragas ANSWERS=data/processed/answers/<run>.jsonl LIMIT=50                 #
 
 ## Run the demo locally
 
-Everything is local — Qdrant in Docker, the API / UI / LLM on the host (GPU).
-No external inference provider.
+Everything is local — Qdrant and Phoenix in Docker, the API / UI / LLM on the host
+(GPU). No external inference provider.
 
 ```bash
-# vector DB (Docker) + the served generator
-docker compose up -d qdrant
+docker compose up -d          # Qdrant + Phoenix
 ollama pull granite4.1:8b
+make demo                     # API + UI on http://localhost:8000, traces on http://localhost:6006
+```
 
-# serve the API + the UI (two terminals)
-make serve        # FastAPI on :8000  — GET /health, POST /ask, GET /options
-make demo         # Gradio UI on :7860  -> open http://localhost:7860
+The UI draws the workflow as a diagram that lights up node by node while a question
+runs: the passages retrieved and reranked, each grade as the grader returns it, the
+neighbours expansion adds, whether the question is routed to the calculator, the
+formula and the table rows behind a verified figure, then the answer, the context it
+was read from and the time spent per step. Every switch of a workflow YAML is a control
+on the side — chunk size, reranker, prefetch and k, grader threshold and floor,
+expansion window, calculator, model, context window — so a configuration is changed
+per question instead of per file. Picking a FinanceBench question puts the expected
+answer next to the generated one.
 
-# or query the API directly
+*Recorded run* replays a question of the reference row (grade ≥ 2, window ±1,
+calculator, `granite4.1:8b`, 12K) from the files the benchmark wrote, with the verdict
+it received: instant, and the GPU stays free. A live question takes minutes on a laptop
+GPU — grading is one LLM call per passage. `scripts/demo_calc_details.py` records the
+calculation behind each verified figure of that run, so the replay shows it too.
+
+The same workflow is served to programs by `POST /ask` (`"pipeline": "naive"` runs the
+graph with every node off, for a comparison) and streamed node by node by
+`POST /demo/run`. `WORKFLOW_CONFIG` (default
+`configs/workflow/serve_grade_exp1_calc_1024.yaml`) sets the defaults.
+
+```bash
 curl -s -X POST localhost:8000/ask -H 'Content-Type: application/json' \
   -d '{"question":"What was 3M FY2018 capital expenditure?","doc_id":"3M_2018_10K"}'
 ```
 
-The LLM, retrieval depth `k` and Qdrant collection are picked in the UI (or per
-request in `/ask`); the default is `granite4.1:8b` at k10 (ADR 0002), set by the
-`RAG_CONFIG` env var. Retrieval models run on the host GPU; on an 8 GB card the
-generator falls back to CPU when both compete for VRAM.
+With tracing on (`make demo`, or `make serve TRACE=1`) every question is a trace in
+the Phoenix project `finqa-api`: a span per graph node and per LLM call, with the
+prompt, the answer and Ollama's token counts.
 
 <!-- Demo GIF — record the UI (see docs/checklists) and uncomment:
 ![RAG demo](docs/assets/demo.gif)
@@ -386,7 +403,7 @@ finqa-engine/
 │   │   ├── retrieval/             # recall@k / MRR / nDCG
 │   │   ├── judge/                 # judging protocols + evidence-grounded outcome grid
 │   │   └── ragas/                 # Ragas metrics + critic served at a pinned context
-│   └── api/                       # FastAPI
+│   └── api/                       # FastAPI: /ask, the demo stream and replay, the demo UI (static/)
 ├── dashboard/                     # Streamlit benchmark explorer
 ├── tests/                         # pytest (unit + integration + eval regression)
 ├── .github/workflows/             # CI: lint, format check, fast tests

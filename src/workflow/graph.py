@@ -101,7 +101,15 @@ def answer_workflow(
     doc_id: str | None = None,
 ) -> WorkflowAnswer:
     """Answer ``question`` by running the configured graph once."""
-    graph = build_graph(retriever, config)
+    return run_graph(build_graph(retriever, config), question, doc_id)
+
+
+def run_graph(graph, question: str, doc_id: str | None = None) -> WorkflowAnswer:
+    """Run an already compiled graph on one question.
+
+    Compiling is separate so a server builds each graph once and reuses it: the graph
+    holds no per-question state, and building it loads the expansion corpus.
+    """
     start = time.perf_counter()
     state: CragState = graph.invoke({"question": question, "doc_id": doc_id})
     return WorkflowAnswer(

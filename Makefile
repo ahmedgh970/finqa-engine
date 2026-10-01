@@ -11,7 +11,7 @@ help:
 	@echo "FinQA Engine — available commands:"
 	@echo ""
 	@echo "  make install        Install runtime (deployable) dependencies only"
-	@echo "  make install-all    Install every extra (ingestion, dev, dashboard, demo, agents) + pre-commit"
+	@echo "  make install-all    Install every extra (ingestion, dev, dashboard, agents) + pre-commit"
 	@echo "  make lint           Run ruff lint"
 	@echo "  make format         Run ruff format"
 	@echo "  make test           Run all tests"
@@ -26,8 +26,8 @@ help:
 	@echo "  make prompts        Pre-materialize generation prompts per question x k -> data/processed/prompts/ (optional LIMIT=<n>, CHUNK_SIZE=, KS=, PREFETCH=)"
 	@echo "  make generate       Run the local Ollama lineup on materialized prompts -> data/processed/answers/ (optional MODELS=, KS=, LIMIT=)"
 	@echo "  make chunk-dist     Plot real chunk-size distribution per budget -> docs/adr/assets/ (needs install-all)"
-	@echo "  make serve          Start FastAPI server"
-	@echo "  make demo           Start the Gradio demo UI (needs make serve running)"
+	@echo "  make serve          Start FastAPI server on the advanced workflow (optional TRACE=1: traces to Phoenix)"
+	@echo "  make demo           Start the demo: API + live workflow UI on :8000, traced to Phoenix"
 	@echo "  make docker-up      Start Docker services (Qdrant, Phoenix)"
 	@echo "  make docker-down    Stop Docker services"
 	@echo "  make clean          Remove generated artefacts"
@@ -36,7 +36,7 @@ install:
 	uv sync
 
 install-all:
-	uv sync --extra ingestion --extra dashboard --extra demo --extra agents
+	uv sync --extra ingestion --extra dashboard --extra agents
 	uv run pre-commit install
 
 lint:
@@ -83,10 +83,11 @@ chunk-dist:
 	uv run --no-sync python scripts/chunk_size_dist.py
 
 serve:
-	uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+	$(if $(TRACE),TRACING=1 ,)uv run $(if $(TRACE),--extra agents ,)uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 
 demo:
-	uv run --extra demo python demo/app.py
+	@echo "FinQA Engine demo on http://localhost:8000 (traces: http://localhost:6006)"
+	TRACING=1 uv run --extra agents uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 
 docker-up:
 	docker compose up -d

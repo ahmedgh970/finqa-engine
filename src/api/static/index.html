@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FinQA Engine</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2313233f'/%3E%3Cpath d='M8 10h16M8 16h11M8 22h14' stroke='%23e8eef7' stroke-width='2.5'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>FinQA Engine</h1>
+        <p>Questions-réponses sur les rapports annuels SEC, exécuté en local</p>
+      </div>
+    </div>
+    <div class="mode" role="tablist" aria-label="Mode">
+      <button role="tab" id="mode-live" aria-selected="true">En direct</button>
+      <button role="tab" id="mode-replay" aria-selected="false">Run enregistré</button>
+    </div>
+    <div class="status">
+      <span id="status-dot" class="dot"></span><span id="status-text">Connexion…</span>
+      <a id="phoenix-link" class="phoenix" href="#" target="_blank" rel="noopener" hidden>Traces Phoenix</a>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="rail" aria-label="Réglages du workflow">
+      <div class="rail-head">
+        <h2>Réglages</h2>
+        <p id="rail-note">Chaque réglage remplace une ligne du fichier de configuration.</p>
+      </div>
+
+      <div class="presets" role="group" aria-label="Préréglages">
+        <button data-preset="naive">RAG naïf</button>
+        <button data-preset="selection">Sélection</button>
+        <button data-preset="full">Complet</button>
+      </div>
+
+      <fieldset class="group" id="g-retrieval">
+        <legend>Recherche</legend>
+        <label class="field">Taille des chunks
+          <div class="seg" id="chunk_size"></div>
+        </label>
+        <label class="switch"><input type="checkbox" id="reranker"><span>Reranker cross-encoder</span></label>
+        <label class="field">Présélection dense <output id="prefetch-out"></output>
+          <input type="range" id="prefetch" min="10" max="100" step="5">
+        </label>
+        <label class="field">Passages transmis (k) <output id="k-out"></output>
+          <input type="range" id="k" min="3" max="30" step="1">
+        </label>
+      </fieldset>
+
+      <fieldset class="group" id="g-grading">
+        <legend><label class="switch"><input type="checkbox" id="grading"><span>Grader LLM</span></label></legend>
+        <label class="field">Note minimale gardée
+          <div class="seg" id="keep_threshold"></div>
+        </label>
+        <label class="field">Plancher (passages minimum) <output id="min_chunks-out"></output>
+          <input type="range" id="min_chunks" min="0" max="6" step="1">
+        </label>
+      </fieldset>
+
+      <fieldset class="group" id="g-expansion">
+        <legend><label class="switch"><input type="checkbox" id="expansion"><span>Expansion aux voisins</span></label></legend>
+        <label class="field">Chunks voisins de chaque côté <output id="window-out"></output>
+          <input type="range" id="window" min="0" max="4" step="1">
+        </label>
+      </fieldset>
+
+      <fieldset class="group" id="g-calculator">
+        <legend><label class="switch"><input type="checkbox" id="calculator"><span>Calculatrice vérifiée</span></label></legend>
+        <p class="hint">Pour les questions qui donnent leur formule : le modèle désigne les lignes, le code lit, contrôle et calcule.</p>
+      </fieldset>
+
+      <fieldset class="group" id="g-generation">
+        <legend>Génération</legend>
+        <label class="field">Modèle
+          <select id="model"></select>
+        </label>
+        <label class="field">Fenêtre de contexte
+          <div class="seg" id="num_ctx"></div>
+        </label>
+      </fieldset>
+    </aside>
+
+    <main class="main">
+      <section class="composer" aria-label="Question">
+        <div class="composer-row">
+          <textarea id="question" rows="2" placeholder="Posez une question sur un rapport, par exemple : What is the FY2018 capital expenditure amount (in USD millions) for 3M?"></textarea>
+          <div class="composer-side">
+            <select id="doc" aria-label="Rapport interrogé"></select>
+            <div class="composer-actions">
+              <button id="open-examples" class="ghost">Questions FinanceBench</button>
+              <button id="run" class="primary">Lancer</button>
+            </div>
+          </div>
+        </div>
+        <p id="example-line" class="example-line" hidden></p>
+      </section>
+
+      <section class="board" aria-label="Workflow">
+        <div class="board-head">
+          <h2>Le workflow, nœud par nœud</h2>
+          <div class="board-meta">
+            <span id="clock" class="clock">—</span>
+          </div>
+        </div>
+        <div id="banner" class="banner" hidden></div>
+        <div class="diagram-wrap">
+          <svg id="diagram" viewBox="0 0 1310 300" role="img" aria-label="Diagramme du workflow"></svg>
+        </div>
+        <ol class="legend" aria-label="Notes du grader">
+          <li><i class="g g0"></i>0 hors sujet</li>
+          <li><i class="g g1"></i>1 contexte</li>
+          <li><i class="g g2"></i>2 une partie de la réponse</li>
+          <li><i class="g g3"></i>3 la réponse</li>
+        </ol>
+      </section>
+
+      <div class="split">
+        <section class="inspector" aria-live="polite">
+          <div class="pane-head">
+            <h2 id="inspector-title">Inspecteur</h2>
+            <p id="inspector-sub">Cliquez un nœud du diagramme pour voir ce qu'il a fait.</p>
+          </div>
+          <div id="inspector-body" class="inspector-body"></div>
+        </section>
+
+        <section class="answer" aria-live="polite">
+          <div class="pane-head">
+            <h2>Réponse</h2>
+            <p id="answer-sub">La réponse apparaît à la fin de la génération.</p>
+          </div>
+          <div id="verified" class="verified" hidden></div>
+          <div id="answer-text" class="answer-text"></div>
+          <div id="gold" class="gold" hidden></div>
+          <dl id="metrics" class="metrics" hidden></dl>
+        </section>
+      </div>
+
+      <section class="sources" aria-label="Contexte lu">
+        <div class="pane-head">
+          <h2>Contexte lu par le générateur</h2>
+          <p id="sources-sub">Les passages retenus, dans l'ordre où le modèle les lit.</p>
+        </div>
+        <div id="sources-list" class="sources-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="examples" class="examples" aria-label="Questions FinanceBench">
+    <div class="examples-head">
+      <h2>Questions FinanceBench</h2>
+      <button id="close-examples" class="ghost" aria-label="Fermer">Fermer</button>
+    </div>
+    <div class="examples-tools">
+      <input id="examples-search" type="search" placeholder="Filtrer par entreprise ou mot-clé">
+      <div class="seg" id="examples-filter">
+        <button data-filter="calc" aria-pressed="true">Calcul vérifié</button>
+        <button data-filter="good" aria-pressed="false">Bonnes réponses</button>
+        <button data-filter="all" aria-pressed="false">Toutes</button>
+      </div>
+    </div>
+    <ul id="examples-list" class="examples-list"></ul>
+  </dialog>
+
+  <script src="/static/app.js" type="module"></script>
+</body>
+</html>

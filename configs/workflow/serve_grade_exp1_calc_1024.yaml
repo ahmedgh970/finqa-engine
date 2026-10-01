@@ -1,0 +1,34 @@
+# Served workflow (API and demo): the ADR 0005 selection plus the verified calculator,
+# run live instead of replayed.
+#
+# Same pipeline as grade_exp1_calc_1024_replayed.yaml, whose selection was rebuilt
+# offline from a stored grading: here reranked(dense) retrieves the top-20 in Qdrant
+# (prefetch 50, scoped to the filing when the request names one), every passage is
+# graded 0-3 and kept at 2 or more (floor of 3), each survivor is read with the chunk on
+# either side of it, and questions whose wording carries a formula go through the
+# calculator before generation. About 22 LLM calls per question: 20 grades, one
+# calculation when routed, one generation.
+#
+#   uv run uvicorn src.api.main:app   (WORKFLOW_CONFIG defaults to this file)
+chunks_path: data/processed/docling/chunked/hybrid/chunks_1024.jsonl
+collection_name: docling_hybrid_1024_bge-m3
+retriever: reranked
+base_retriever: dense
+rerank_prefetch: 50
+reranker_dtype: float16   # shares the GPU with the generator: half the memory
+doc_scoped: true
+k: 20
+grading:
+  enabled: true
+  keep_threshold: 2
+  min_chunks: 3
+expansion:
+  enabled: true
+  window: 1
+calculator:
+  enabled: true
+llm:
+  model: ollama_chat/granite4.1:8b
+  temperature: 0.0
+  max_tokens: 1024
+  num_ctx: 12288
