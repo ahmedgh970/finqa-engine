@@ -18,7 +18,7 @@ Usage:
     python -m src.evaluation.run_judge --config configs/evaluation/judge/grid.yaml \
         --answers data/processed/answers/<run>.jsonl --model ollama_chat/qwen3.5:9b
     python -m src.evaluation.run_judge --config configs/evaluation/judge/correct_grounded.yaml \
-        --answers data/processed/answers/naif_rag/*_k20.jsonl
+        --answers data/processed/answers/naive/*_k20.jsonl
     python -m src.evaluation.run_judge --config configs/evaluation/judge/prometheus.yaml --id financebench_id_03029
 """
 

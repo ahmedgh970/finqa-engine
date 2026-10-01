@@ -1,0 +1,35 @@
+# The reference row of ADR 0005 with the verified calculator switched on: 1024-token
+# chunks, graded >= 2, each survivor read with the chunk on either side, at num_ctx
+# 12288 -- and, when the wording states a computation, one structured call that reports
+# the formula and the values it read, checked against the passages before the code
+# evaluates it in exact decimal.
+#
+# Target of the row: the 12 questions whose formula has every input in context. Eight
+# are already answered correctly without the tool and must not regress; four fail while
+# the context holds everything they need (10420, 04103, 03473, 04254), and those are
+# what the calculator exists for.
+#
+# As for the other replayed rows, generation reuses the selection grade_1024.yaml
+# already made, so grading is not paid twice. The row's real cost is ~22 LLM calls per
+# routed question: 20 grading, 1 extraction, 1 generation.
+#
+#   uv run python -m src.workflow.runner --config configs/workflow/grade_exp1_calc_1024_replayed.yaml
+name: grade_exp1_calc
+chunks_path: data/processed/docling/chunked/hybrid/chunks_1024.jsonl
+collection_name: docling_hybrid_1024_bge-m3
+retriever: replay
+replay_path: data/processed/prompts/expanded/workflow_grade_replay_docling_hybrid_1024_bge-m3_ollama_chat_granite4.1:8b_k20_12kc_pm1.jsonl
+doc_scoped: true
+k: 200   # the whole widened context; the trim to num_ctx decides what survives
+grading:
+  enabled: false   # replayed from grade_1024.yaml, see above
+expansion:
+  enabled: false   # already applied offline
+calculator:
+  enabled: true
+  routing: heuristic   # deterministic regex on the wording, never on a known question
+llm:
+  model: ollama_chat/granite4.1:8b
+  temperature: 0.0
+  max_tokens: 1024
+  num_ctx: 12288

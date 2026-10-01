@@ -9,6 +9,8 @@ a bad request fails immediately since retrying can't help.
 
 from __future__ import annotations
 
+import contextlib
+import json
 import os
 from typing import TypeVar
 
@@ -19,6 +21,22 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from src.llm.config import LLMConfig
 
 T = TypeVar("T", bound=BaseModel)
+
+# Calls go to Ollama over plain HTTP, which the LangChain instrumentation never sees, so
+# each one opens its own LLM span. Without a registered tracer provider (tracing off,
+# the default) the OpenTelemetry API hands out no-op spans; without the library at all
+# there is nothing to open.
+try:
+    from opentelemetry import trace as _otel_trace
+except ImportError:  # tracing extra not installed
+    _otel_trace = None
+# The graph node making the call is a LangChain span that the instrumentation does not
+# make the current OpenTelemetry context; asked for explicitly, it parents the LLM span,
+# so a question's calls sit under their node instead of in traces of their own.
+try:
+    from openinference.instrumentation.langchain import get_current_span as _node_span
+except ImportError:
+    _node_span = None
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 
@@ -98,9 +116,51 @@ def generate(
     }
     if schema is not None:
         payload["format"] = schema
-    response = requests.post(f"{OLLAMA_URL}/api/chat", json=payload, timeout=1800)
-    response.raise_for_status()
-    return response.json().get("message", {}).get("content", "")
+    with _llm_span(payload) as span:
+        response = requests.post(f"{OLLAMA_URL}/api/chat", json=payload, timeout=1800)
+        response.raise_for_status()
+        body = response.json()
+        content = body.get("message", {}).get("content", "")
+        if span is not None:
+            _record_output(span, body, content)
+    return content
+
+
+def _llm_span(payload: dict):
+    """An OpenInference LLM span around one Ollama call, or a no-op context."""
+    if _otel_trace is None:
+        return contextlib.nullcontext()
+    return _otel_trace.get_tracer(__name__).start_as_current_span(
+        "ollama.chat",
+        context=_parent_context(),
+        attributes={
+            "openinference.span.kind": "LLM",
+            "llm.model_name": payload["model"],
+            "llm.invocation_parameters": json.dumps(payload["options"]),
+            "input.value": payload["messages"][-1]["content"],
+        },
+    )
+
+
+def _parent_context():
+    """The OpenTelemetry context of the graph node calling, if it is traced."""
+    if _node_span is None:
+        return None
+    try:
+        parent = _node_span()
+    except Exception:  # outside a traced LangChain run
+        return None
+    return _otel_trace.set_span_in_context(parent) if parent is not None else None
+
+
+def _record_output(span, body: dict, content: str) -> None:
+    """The answer and Ollama's own token counts, on the call's span."""
+    prompt_tokens = body.get("prompt_eval_count", 0)
+    completion_tokens = body.get("eval_count", 0)
+    span.set_attribute("output.value", content)
+    span.set_attribute("llm.token_count.prompt", prompt_tokens)
+    span.set_attribute("llm.token_count.completion", completion_tokens)
+    span.set_attribute("llm.token_count.total", prompt_tokens + completion_tokens)
 
 
 class StructuredOutputError(ValueError):

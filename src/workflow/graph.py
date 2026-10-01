@@ -1,4 +1,4 @@
-"""The advanced RAG graph: retrieve -> [grade] -> [expand] -> generate.
+"""The advanced RAG graph: retrieve -> [grade] -> [expand] -> [route -> calculate] -> generate.
 
 Only the nodes enabled by the config are wired in, so one graph serves every row of
 the ablation matrix. With grading off it reduces to retrieve -> generate, which is the
@@ -23,7 +23,14 @@ from langgraph.graph import END, START, StateGraph
 from src.ingestion.schema import Chunk
 from src.retrieval.base import Retriever
 from src.workflow.config import WorkflowConfig
-from src.workflow.nodes import make_expand, make_generate, make_grade, make_retrieve
+from src.workflow.nodes import (
+    make_calculate,
+    make_expand,
+    make_generate,
+    make_grade,
+    make_retrieve,
+    make_route,
+)
 from src.workflow.state import CragState
 
 
@@ -39,6 +46,10 @@ class WorkflowAnswer:
     n_kept_by_floor: int = 0
     n_dropped_to_fit: int = 0
     n_expanded: int = 0  # passages added around the selection by the expansion node
+    is_numeric: bool = False  # the wording states a computation the tool can verify
+    computed: str | None = None  # the verified figure, None when the tool declined
+    calc_error: str | None = None  # why it declined
+    computed_used: bool = False  # whether the figure survived into the answer
     grades: list[int] = field(default_factory=list)
     max_grade: int | None = None
     low_confidence: bool = False
@@ -62,7 +73,22 @@ def build_graph(retriever: Retriever, config: WorkflowConfig):
         builder.add_node("expand", make_expand(config))
         builder.add_edge(selected_by, "expand")
         selected_by = "expand"
-    builder.add_edge(selected_by, "generate")
+
+    if config.calculator.enabled:
+        # The routing decision is a node so it lands in the state, and the branch it
+        # opens always rejoins generate: a declined computation is not a dead end, it is
+        # the ungraded answer the row would have produced anyway.
+        builder.add_node("route", make_route())
+        builder.add_node("calculate", make_calculate(config))
+        builder.add_edge(selected_by, "route")
+        builder.add_conditional_edges(
+            "route",
+            lambda state: "calculate" if state.get("is_numeric") else "generate",
+            {"calculate": "calculate", "generate": "generate"},
+        )
+        builder.add_edge("calculate", "generate")
+    else:
+        builder.add_edge(selected_by, "generate")
 
     builder.add_edge("generate", END)
     return builder.compile()
@@ -75,7 +101,15 @@ def answer_workflow(
     doc_id: str | None = None,
 ) -> WorkflowAnswer:
     """Answer ``question`` by running the configured graph once."""
-    graph = build_graph(retriever, config)
+    return run_graph(build_graph(retriever, config), question, doc_id)
+
+
+def run_graph(graph, question: str, doc_id: str | None = None) -> WorkflowAnswer:
+    """Run an already compiled graph on one question.
+
+    Compiling is separate so a server builds each graph once and reuses it: the graph
+    holds no per-question state, and building it loads the expansion corpus.
+    """
     start = time.perf_counter()
     state: CragState = graph.invoke({"question": question, "doc_id": doc_id})
     return WorkflowAnswer(
@@ -87,6 +121,10 @@ def answer_workflow(
         n_kept_by_floor=state.get("n_kept_by_floor", 0),
         n_dropped_to_fit=state.get("n_dropped_to_fit", 0),
         n_expanded=len(state.get("expanded", [])),
+        is_numeric=state.get("is_numeric", False),
+        computed=state.get("computed"),
+        calc_error=state.get("calc_error"),
+        computed_used=state.get("computed_used", False),
         grades=state.get("grades", []),
         max_grade=state.get("max_grade"),
         low_confidence=state.get("low_confidence", False),

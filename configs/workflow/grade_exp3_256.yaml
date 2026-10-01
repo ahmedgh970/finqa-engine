@@ -2,13 +2,13 @@
 # 3 chunks on either side of it in its document (the expansion node, no LLM call).
 #
 # The conservative window of the pair: measured offline on the graded contexts of
-# grading_256.yaml, it holds 0.709 of the evidence numbers and every number of 40% of
+# grade_256.yaml, it holds 0.709 of the evidence numbers and every number of 40% of
 # the questions in ~5.7K tokens of context, against 0.467 / 22% without expansion. Only
 # 27 of the 150 are trimmed back by _fit_context at num_ctx 12288, against 75 for the
-# wider grading_256_pm6.yaml, so what the generator reads is close to the window it
+# wider grade_exp6_256.yaml, so what the generator reads is close to the window it
 # names.
 #
-#   uv run python -m src.workflow.runner --config configs/workflow/grading_256_pm3.yaml
+#   uv run python -m src.workflow.runner --config configs/workflow/grade_exp3_256.yaml
 chunks_path: data/processed/docling/chunked/hybrid/chunks_256.jsonl
 collection_name: docling_hybrid_256_bge-m3
 retriever: replay

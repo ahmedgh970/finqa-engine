@@ -37,6 +37,9 @@ class RagConfig(BaseModel):
     base_retriever: str | None = None
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     rerank_prefetch: int = 50
+    # None keeps the checkpoint's precision (every benchmark row); "float16" when the
+    # reranker shares a GPU with the generator, as in serving.
+    reranker_dtype: str | None = None
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
 

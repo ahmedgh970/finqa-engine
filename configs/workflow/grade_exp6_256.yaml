@@ -1,7 +1,7 @@
 # Select small, read wide: the 256-token grading row, each kept passage widened to the
 # 6 chunks on either side of it in its document (the expansion node, no LLM call).
 #
-# Measured offline on the graded contexts of grading_256.yaml, at equal context budget
+# Measured offline on the graded contexts of grade_256.yaml, at equal context budget
 # this beats both the 1024-token corpus and an ungraded top-k widened the same way:
 # ~9.2K tokens of context holding 0.757 of the evidence numbers and every number of 46%
 # of the questions, against 0.744 / 39% for the 1024 corpus at k13 (~9.8K tokens).
@@ -9,11 +9,11 @@
 # This window does not fit the pinned window on every question: with the output budget
 # and the estimator's margin, 75 of the 150 are trimmed back by _fit_context, which
 # drops the lowest-ranked passages -- the neighbourhoods of the weakest survivors. The
-# row is therefore an upper window rather than an exact one, and grading_256_pm3.yaml
+# row is therefore an upper window rather than an exact one, and grade_exp3_256.yaml
 # is its conservative counterpart (27 trimmed). Both run at num_ctx 12288: above that
 # latency climbs faster than the gain.
 #
-#   uv run python -m src.workflow.runner --config configs/workflow/grading_256_pm6.yaml
+#   uv run python -m src.workflow.runner --config configs/workflow/grade_exp6_256.yaml
 chunks_path: data/processed/docling/chunked/hybrid/chunks_256.jsonl
 collection_name: docling_hybrid_256_bge-m3
 retriever: replay

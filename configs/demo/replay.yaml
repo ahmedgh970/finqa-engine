@@ -1,0 +1,23 @@
+# The recorded run the demo replays: the reference row of ADR 0005 with the verified
+# calculator (grade >= 2, window +-1, num_ctx 12288, granite4.1:8b, 1024-token chunks),
+# rebuilt from the files each stage wrote, and the outcome the qwen3.5:9b judge gave.
+label: Run de référence — grader + expansion ±1 + calculatrice, granite4.1:8b, 12K
+settings:
+  model: granite4.1:8b
+  chunk_size: 1024
+  reranker: true
+  prefetch: 50
+  k: 20
+  grading: true
+  keep_threshold: 2
+  min_chunks: 3
+  expansion: true
+  window: 1
+  calculator: true
+  num_ctx: 12288
+retrieval: data/processed/prompts/prompts_reranked-dense_docling_hybrid_1024_bge-m3_docscoped_pf50_k20.jsonl
+grading: data/processed/answers/workflow/workflow_grade_replay_docling_hybrid_1024_bge-m3_ollama_chat_granite4.1:8b_k20_12kc.jsonl
+expansion: data/processed/prompts/expanded/workflow_grade_replay_docling_hybrid_1024_bge-m3_ollama_chat_granite4.1:8b_k20_12kc_pm1.jsonl
+answers: data/processed/answers/workflow/workflow_grade_exp1_calc_replay_docling_hybrid_1024_bge-m3_ollama_chat_granite4.1:8b_k200_12kc.jsonl
+verdicts: data/processed/judged/workflow_grade_exp1_calc_replay_docling_hybrid_1024_bge-m3_ollama_chat_granite4.1:8b_k200_12kc_grid_by_ollama_chat_qwen3.5:9b.jsonl
+calculations: data/processed/demo/calc_details.jsonl

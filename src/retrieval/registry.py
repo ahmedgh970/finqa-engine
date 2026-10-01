@@ -52,7 +52,7 @@ def _build_reranked(cfg) -> Retriever:
     base = build_retriever(cfg.base_retriever, cfg)
     return RerankedRetriever(
         base=base,
-        reranker=Reranker(cfg.reranker_model),
+        reranker=Reranker(cfg.reranker_model, getattr(cfg, "reranker_dtype", None)),
         prefetch=cfg.rerank_prefetch,
     )
 

@@ -2,8 +2,8 @@
 # feedback per answer, validated as a reproducible local judge at the ranking level.
 # The prompt is prometheus-eval's, verbatim, so this protocol only runs a Prometheus model.
 #   make judge PROTOCOL=prometheus
-#   make judge PROTOCOL=prometheus ANSWERS='data/processed/answers/naif_rag/*_k20.jsonl'
-answers_path: data/processed/answers/naif_rag/reranked_docling_hybrid_1024_bge-m3_ollama_chat_granite4.1:8b_k20.jsonl
+#   make judge PROTOCOL=prometheus ANSWERS='data/processed/answers/naive/*_k20.jsonl'
+answers_path: data/processed/answers/naive/reranked_docling_hybrid_1024_bge-m3_ollama_chat_granite4.1:8b_k20.jsonl
 protocol: prometheus
 name: prometheus  # -> ..._judged_by_prometheus.jsonl, the files ADR 0003 was built on
 llm:
