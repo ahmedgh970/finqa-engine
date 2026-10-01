@@ -404,7 +404,6 @@ finqa-engine/
 │   │   ├── judge/                 # judging protocols + evidence-grounded outcome grid
 │   │   └── ragas/                 # Ragas metrics + critic served at a pinned context
 │   └── api/                       # FastAPI: /ask, the demo stream and replay, the demo UI (static/)
-├── dashboard/                     # Streamlit benchmark explorer
 ├── tests/                         # pytest (unit + integration + eval regression)
 ├── .github/workflows/             # CI: lint, format check, fast tests
 ├── docker-compose.yml             # Qdrant + Phoenix

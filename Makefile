@@ -11,7 +11,7 @@ help:
 	@echo "FinQA Engine — available commands:"
 	@echo ""
 	@echo "  make install        Install runtime (deployable) dependencies only"
-	@echo "  make install-all    Install every extra (ingestion, dev, dashboard, agents) + pre-commit"
+	@echo "  make install-all    Install every extra (ingestion, dev, agents) + pre-commit"
 	@echo "  make lint           Run ruff lint"
 	@echo "  make format         Run ruff format"
 	@echo "  make test           Run all tests"
@@ -36,7 +36,7 @@ install:
 	uv sync
 
 install-all:
-	uv sync --extra ingestion --extra dashboard --extra agents
+	uv sync --extra ingestion --extra agents
 	uv run pre-commit install
 
 lint:
