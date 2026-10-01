@@ -11,23 +11,30 @@ from __future__ import annotations
 
 from sentence_transformers import CrossEncoder
 
-_models: dict[str, CrossEncoder] = {}
+_models: dict[tuple[str, str | None], CrossEncoder] = {}
 
 
-def _get_model(model_name: str) -> CrossEncoder:
-    if model_name not in _models:
-        _models[model_name] = CrossEncoder(model_name)
-    return _models[model_name]
+def _get_model(model_name: str, dtype: str | None = None) -> CrossEncoder:
+    if (model_name, dtype) not in _models:
+        kwargs = {"model_kwargs": {"torch_dtype": dtype}} if dtype else {}
+        _models[(model_name, dtype)] = CrossEncoder(model_name, **kwargs)
+    return _models[(model_name, dtype)]
 
 
 class Reranker:
-    """Score (query, text) pairs with a cross-encoder."""
+    """Score (query, text) pairs with a cross-encoder.
 
-    def __init__(self, model_name: str):
+    ``dtype`` (e.g. ``"float16"``) halves the weights and the activations when the
+    reranker shares a GPU with a generator; ``None`` keeps the checkpoint's precision,
+    the setting every benchmark row was measured with.
+    """
+
+    def __init__(self, model_name: str, dtype: str | None = None):
         self.model_name = model_name
+        self.dtype = dtype
 
     def score(self, query: str, texts: list[str]) -> list[float]:
         """Return one relevance score per text, in the same order as ``texts``."""
-        model = _get_model(self.model_name)
+        model = _get_model(self.model_name, self.dtype)
         pairs = [(query, text) for text in texts]
         return model.predict(pairs).tolist()
