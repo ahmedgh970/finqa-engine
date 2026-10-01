@@ -22,7 +22,7 @@ const NODE_W = 150;
 const NODE_H = 100;
 const NODES = [
   { id: "question", x: 10, y: ROW_Y, title: "Question", sub: () => clip(docLabel() || "tous les rapports", 19) },
-  { id: "dense", x: 176, y: ROW_Y, title: "Recherche dense", sub: (s) => `BGE-M3, top ${s.prefetch}` },
+  { id: "dense", x: 176, y: ROW_Y, title: "Recherche dense", sub: (s) => `BGE-M3, top ${s.reranker ? s.prefetch : s.k}` },
   { id: "rerank", x: 342, y: ROW_Y, title: "Reranker", sub: (s) => `garde le top ${s.k}` },
   { id: "grade", x: 508, y: ROW_Y, title: "Grader LLM", sub: (s) => `garde la note ≥ ${s.keep_threshold}` },
   { id: "expand", x: 674, y: ROW_Y, title: "Expansion", sub: (s) => `±${s.window} chunk voisin` },
@@ -73,10 +73,12 @@ const OUTCOMES = {
   dont_know: "Le modèle a refusé de répondre",
 };
 
+// A ladder: each preset adds one stage to the one before it.
 const PRESETS = {
-  naive: { reranker: true, grading: false, expansion: false, calculator: false },
-  selection: { reranker: true, grading: true, keep_threshold: 2, min_chunks: 3, expansion: true, window: 1, calculator: false },
-  full: { reranker: true, grading: true, keep_threshold: 2, min_chunks: 3, expansion: true, window: 1, calculator: true },
+  naive: { reranker: false, grading: false, expansion: false, calculator: false },
+  rerank: { reranker: true, grading: false, expansion: false, calculator: false },
+  grade_expand: { reranker: true, grading: true, keep_threshold: 2, min_chunks: 3, expansion: true, window: 1, calculator: false },
+  advanced: { reranker: true, grading: true, keep_threshold: 2, min_chunks: 3, expansion: true, window: 1, calculator: true },
 };
 
 // --- small helpers --------------------------------------------------------------------
@@ -949,7 +951,19 @@ function pickExample(e) {
 
 // --- modes & boot ---------------------------------------------------------------------
 
+// The results page sits beside the demo rather than replacing a mode: a run in progress
+// keeps going while it is open and is still there on the way back.
+function showResults(on) {
+  $(".layout").hidden = on;
+  $("#results").hidden = !on;
+  $("#mode-results").setAttribute("aria-selected", String(on));
+  $("#mode-live").setAttribute("aria-selected", String(!on && state.mode === "live"));
+  $("#mode-replay").setAttribute("aria-selected", String(!on && state.mode === "replay"));
+  if (on) window.scrollTo(0, 0);
+}
+
 function setMode(mode) {
+  showResults(false);
   if (state.run && !state.run.finished) return;
   state.mode = mode;
   $("#mode-live").setAttribute("aria-selected", String(mode === "live"));
@@ -1005,6 +1019,7 @@ async function boot() {
 
   $("#mode-live").addEventListener("click", () => setMode("live"));
   $("#mode-replay").addEventListener("click", () => setMode("replay"));
+  $("#mode-results").addEventListener("click", () => showResults(true));
   $("#run").addEventListener("click", run);
   $("#question").addEventListener("input", () => {
     updateRunButton();

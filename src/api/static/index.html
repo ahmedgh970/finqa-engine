@@ -22,6 +22,7 @@
     <div class="mode" role="tablist" aria-label="Mode">
       <button role="tab" id="mode-live" aria-selected="true">En direct</button>
       <button role="tab" id="mode-replay" aria-selected="false">Run enregistré</button>
+      <button role="tab" id="mode-results" aria-selected="false">Résultats mesurés</button>
     </div>
     <div class="status">
       <span id="status-dot" class="dot"></span><span id="status-text">Connexion…</span>
@@ -37,9 +38,10 @@
       </div>
 
       <div class="presets" role="group" aria-label="Préréglages">
-        <button data-preset="naive">RAG naïf</button>
-        <button data-preset="selection">Sélection</button>
-        <button data-preset="full">Complet</button>
+        <button data-preset="naive" title="Question, recherche dense, génération">Naive RAG</button>
+        <button data-preset="rerank" title="+ reranker cross-encoder sur la présélection dense">Retrieve &amp; Rerank</button>
+        <button data-preset="grade_expand" title="+ grader LLM et expansion aux chunks voisins">Grade &amp; Expand</button>
+        <button data-preset="advanced" title="+ calculatrice vérifiée : le workflow complet">Advanced RAG</button>
       </div>
 
       <fieldset class="group" id="g-retrieval">
@@ -157,6 +159,116 @@
       </section>
     </main>
   </div>
+
+  <section id="results" class="results" hidden aria-label="Résultats mesurés">
+    <header class="results-head">
+      <h2>Résultats mesurés</h2>
+      <p>150 questions d'analystes de FinanceBench sur 368 rapports SEC, tout en local sur un GPU de 8 Go. Chaque étage du workflow est là parce qu'une mesure l'a justifié, et chaque mesure ne change qu'une chose à la fois.</p>
+    </header>
+
+    <article class="sheet">
+      <h3>L'échelle du workflow, à 12K tokens de contexte</h3>
+      <p class="lead">Bonnes réponses sur 150 : correctes, avec la page de preuve dans le contexte. Mêmes 20 passages pour chaque ligne, même modèle (granite4.1:8b), même juge.</p>
+      <ul class="bars" style="--max: 80">
+        <li title="Top-20 du reranker, sans sélection : 7 593 tokens lus, 1 appel LLM, 107 s par question">
+          <span class="label">Retrieve &amp; Rerank<small>top-20 brut, 7.6K tokens lus</small></span>
+          <span class="track"><i style="--v: 72"></i></span><span class="value">72</span>
+        </li>
+        <li title="Grader seul, sans expansion : 4 048 tokens lus, 21 appels LLM, 161 s par question">
+          <span class="label">Grader seul<small>sans expansion, 4.0K tokens lus</small></span>
+          <span class="track"><i style="--v: 68"></i></span><span class="value">68</span>
+        </li>
+        <li class="kept" title="Grader (note ≥ 2) puis expansion ±1 chunk : 6 314 tokens lus, 21 appels LLM, 136 s par question (ADR 0005)">
+          <span class="label">Grade &amp; Expand<small>retenu, 6.3K tokens lus</small></span>
+          <span class="track"><i style="--v: 74"></i></span><span class="value">74</span>
+        </li>
+        <li class="kept" title="Grade &amp; Expand + calculatrice vérifiée : un appel LLM de plus sur les 30 questions routées">
+          <span class="label">Advanced RAG<small>+ calculatrice, 6.3K tokens lus</small></span>
+          <span class="track"><i style="--v: 75"></i></span><span class="value">75</span>
+        </li>
+        <li class="ref" title="Top-20 brut avec une fenêtre de 24K : 14 340 tokens lus, 1 appel LLM, 187 s par question">
+          <span class="label">Référence à 24K<small>top-20 brut, 14.3K tokens lus</small></span>
+          <span class="track"><i style="--v: 77"></i></span><span class="value">77</span>
+        </li>
+      </ul>
+      <p class="takeaway">Grade &amp; Expand atteint à 12K ce que le top-20 brut atteint à 24K, en lisant 56 % de tokens en moins : deux fois moins de mémoire GPU par requête. Un écart de moins de 5 bonnes réponses reste dans le bruit du juge.</p>
+    </article>
+
+    <div class="sheets-2">
+      <article class="sheet">
+        <h3>La recherche</h3>
+        <p class="lead">Part des pages de preuve retrouvées dans les 10 premiers passages (recall@10, chunks de 512 tokens).</p>
+        <ul class="bars" style="--max: 1">
+          <li title="Recherche dense sur toute la collection : recall@10 0.297, MRR 0.182">
+            <span class="label">Dense<small>toute la collection</small></span>
+            <span class="track"><i style="--v: 0.297"></i></span><span class="value">0.30</span>
+          </li>
+          <li title="Recherche dense limitée au rapport visé : recall@10 0.552, MRR 0.338">
+            <span class="label">Dense<small>filtrée sur le rapport</small></span>
+            <span class="track"><i style="--v: 0.552"></i></span><span class="value">0.55</span>
+          </li>
+          <li class="kept" title="+ reranker cross-encoder sur 50 candidats : recall@10 0.649, MRR 0.438 (ADR 0001)">
+            <span class="label">+ Reranker<small>retenu, ADR 0001</small></span>
+            <span class="track"><i style="--v: 0.649"></i></span><span class="value">0.65</span>
+          </li>
+        </ul>
+        <p class="takeaway">BM25 et la fusion hybride ont été essayés et écartés : le reranker apporte le gain le plus fort.</p>
+      </article>
+
+      <article class="sheet">
+        <h3>La taille des chunks</h3>
+        <p class="lead">Les métriques classiques ne voient pas la différence ; la part des chiffres de la preuve réellement lus, si.</p>
+        <table class="figures">
+          <thead><tr><th>Chunks</th><th>recall@20</th><th>Chiffres de la preuve dans le contexte</th></tr></thead>
+          <tbody>
+            <tr><td>256 tokens</td><td>0.738</td><td>63 %</td></tr>
+            <tr><td>512 tokens</td><td>0.744</td><td>71 %</td></tr>
+            <tr class="kept"><td>1024 tokens</td><td>0.751</td><td>80 %</td></tr>
+          </tbody>
+        </table>
+        <p class="takeaway">Une preuve fait en moyenne 443 tokens : un petit chunk tombe sur la bonne page sans porter les chiffres.</p>
+      </article>
+    </div>
+
+    <div class="sheets-2">
+      <article class="sheet">
+        <h3>Le modèle</h3>
+        <p class="lead">Réponses correctes et fondées sur le contexte, sur 150 (RAG avec reranker, meilleure profondeur par modèle, ADR 0002).</p>
+        <ul class="bars" style="--max: 70">
+          <li class="kept" title="granite4.1:8b, k=20 : 65.3 % équivalent, Prometheus 4.15"><span class="label">granite4.1:8b</span><span class="track"><i style="--v: 65.3"></i></span><span class="value">65 %</span></li>
+          <li title="qwen3.5:4b, k=20 : 60.0 %"><span class="label">qwen3.5:4b</span><span class="track"><i style="--v: 60"></i></span><span class="value">60 %</span></li>
+          <li title="qwen3.5:9b, k=20 : 58.0 %"><span class="label">qwen3.5:9b</span><span class="track"><i style="--v: 58"></i></span><span class="value">58 %</span></li>
+          <li title="llama3.1:8b, k=20 : 50.7 %"><span class="label">llama3.1:8b</span><span class="track"><i style="--v: 50.7"></i></span><span class="value">51 %</span></li>
+          <li title="mistral-nemo (12B), k=5 : 47.3 %"><span class="label">mistral-nemo</span><span class="track"><i style="--v: 47.3"></i></span><span class="value">47 %</span></li>
+          <li title="mistral:7b, k=20 : 41.3 %"><span class="label">mistral:7b</span><span class="track"><i style="--v: 41.3"></i></span><span class="value">41 %</span></li>
+          <li class="ref" title="GPT-4 Turbo, réponses publiées par FinanceBench (2023, un index par rapport) : 48.0 % correctes. Modèle, recherche et juge différents : un repère, pas une comparaison contrôlée."><span class="label">GPT-4 Turbo<small>repère publié, correctes seulement</small></span><span class="track"><i style="--v: 48"></i></span><span class="value">48 %</span></li>
+        </ul>
+        <p class="takeaway">Un modèle de 8B quantifié en 4 bits, en local, devant le repère GPT-4 Turbo publié avec FinanceBench (dans un setup différent).</p>
+      </article>
+
+      <article class="sheet">
+        <h3>La calculatrice : refuser plutôt que se tromper</h3>
+        <p class="lead">Le modèle désigne les lignes des tableaux, le code lit les valeurs, les vérifie et calcule.</p>
+        <dl class="tiles">
+          <div><dt>Questions routées</dt><dd>30</dd></div>
+          <div><dt>Calculs vérifiés</dt><dd>11</dd></div>
+          <div><dt>Faux acceptés</dt><dd>0</dd></div>
+          <div><dt>Réponses changées hors calcul</dt><dd>0 / 120</dd></div>
+        </dl>
+        <p class="takeaway">Sur le run de référence, 11 calculs sur 11 sont justes et les 120 questions non routées gardent une réponse identique. Le gain net est d'une bonne réponse, dans le bruit : l'apport, c'est un chiffre vérifié par le code, avec ses lignes sources. En démo avec qwen3.5:4b, un faux accepté a été trouvé (le chiffre d'affaires 2019 pour une formule « FY2020 revenue ») : il a donné une règle de plus, sans aucune régression sur les 90 extractions rejouées.</p>
+      </article>
+    </div>
+
+    <article class="sheet method">
+      <h3>Comment c'est mesuré</h3>
+      <ul>
+        <li>Une grille à cinq issues sépare « le modèle s'est trompé » de « la preuve n'était pas dans le contexte » : elle dit quel étage corriger.</li>
+        <li>Le juge local (qwen3.5:9b) a été validé contre une référence sur des runs qui n'ont pas servi à le régler (kappa 0.81).</li>
+        <li>La recherche est rejouée à l'identique : deux lignes ne diffèrent que par l'étage testé.</li>
+        <li>Modèles open-weight en 4 bits (Q4_K_M), latences mesurées sur un GPU laptop de 8 Go ; chaque décision est consignée dans une ADR.</li>
+      </ul>
+    </article>
+  </section>
 
   <dialog id="examples" class="examples" aria-label="Questions FinanceBench">
     <div class="examples-head">

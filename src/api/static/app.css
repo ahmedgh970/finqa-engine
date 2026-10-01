@@ -92,7 +92,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .rail-head h2 { font-size: 16px; }
 .rail-head p { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
 .rail.locked .group, .rail.locked .presets { opacity: 0.55; pointer-events: none; }
-.presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.presets { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
 .presets button {
   border: 1px solid var(--rule); background: #fff; padding: 7px 4px; border-radius: var(--radius-sm);
   cursor: pointer; font-size: 13px; font-weight: 500;
@@ -330,4 +330,53 @@ table.vars td.num { text-align: right; font-weight: 600; white-space: nowrap; }
   .source .snip { display: none; }
   .plist li { grid-template-columns: 24px 14px minmax(0, 1fr) auto; }
   .plist .snip { display: none; }
+}
+
+/* --- measured results ----------------------------------------------------------------- */
+.results { max-width: 1180px; margin: 0 auto; padding: 26px 28px 48px; display: grid; gap: 18px; }
+.results-head h2 { font-size: 22px; }
+.results-head p { color: var(--ink-2); max-width: 78ch; margin-top: 6px; }
+.sheet { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius-lg); padding: 18px 20px; }
+.sheet h3 { font-size: 17px; }
+.sheet .lead { font-size: 14px; color: var(--ink-2); margin-top: 4px; max-width: 75ch; }
+.sheet .takeaway { font-size: 14px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--rule-2); max-width: 80ch; }
+.sheets-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+
+/* One series of horizontal bars: the label, the bar from a shared baseline, the value at its tip. */
+.bars { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.bars li { display: grid; grid-template-columns: 200px minmax(0, 1fr) 56px; align-items: center; gap: 12px; padding: 3px 0; border-radius: var(--radius-sm); }
+.bars li:hover { background: #fff; }
+.bars .label { font-size: 14px; font-weight: 500; line-height: 1.25; }
+.bars .label small { display: block; font-size: 12px; color: var(--ink-2); font-weight: 400; }
+.bars .track { position: relative; height: 18px; border-left: 1px solid var(--rule); }
+.bars .track i {
+  position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--v) / var(--max) * 100%);
+  background: var(--g2); border-radius: 0 4px 4px 0;
+}
+.bars li.kept .track i { background: var(--verified); }
+.bars li.ref .track i { background: repeating-linear-gradient(135deg, var(--g1) 0 4px, transparent 4px 7px); border: 1px solid var(--g1); border-left: 0; }
+.bars .value { font-size: 15px; font-weight: 600; }
+.bars li.kept .label { color: var(--ink); }
+
+table.figures { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 14px; }
+table.figures th { text-align: left; font-weight: 500; color: var(--ink-2); padding: 6px 8px; border-bottom: 1px solid var(--rule); }
+table.figures td { padding: 8px; border-bottom: 1px solid var(--rule-2); }
+table.figures td + td, table.figures th + th { text-align: right; }
+table.figures tr.kept td { font-weight: 600; color: var(--verified); }
+
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 14px 0 0; }
+.tiles div { background: #fff; border: 1px solid var(--rule-2); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; }
+.tiles dd { margin-top: auto !important; padding-top: 4px; }
+.tiles dt { font-size: 12.5px; color: var(--ink-2); }
+.tiles dd { margin: 2px 0 0; font-size: 24px; font-weight: 600; }
+
+.method ul { margin: 10px 0 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; color: var(--ink-2); max-width: 90ch; }
+
+@media (max-width: 1000px) {
+  .sheets-2 { grid-template-columns: 1fr; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .results { padding: 16px; }
+  .bars li { grid-template-columns: 120px minmax(0, 1fr) 48px; }
 }
