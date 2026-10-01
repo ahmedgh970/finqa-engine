@@ -20,6 +20,7 @@ from src.workflow.calculator import (
     routes_to_calculator,
     rows_of,
     statement_of,
+    states_figure,
 )
 from src.workflow.prompts import build_calc_prompt
 from src.workflow.schemas import CalcSpec, CalcVariable
@@ -598,3 +599,17 @@ def test_a_per_share_block_cut_by_the_chunker_goes_on_in_the_next_chunk():
     elsewhere = Chunk(chunk_id="ACME_2020_10K::20", doc_id="ACME_2020_10K", page=20, text=rows_text)
     assert rows_of([head, following])[-1].label.endswith("(per share)")
     assert not rows_of([head, elsewhere])[-1].label.endswith("(per share)")
+
+
+@pytest.mark.parametrize(
+    ("answer", "figure", "kept"),
+    [
+        ("FCF = $3,215.4 million", "3215.40", True),  # measured: formatted, same value
+        ("net working capital is **$5,818 million**", "5818.00", True),
+        ("the average is **55.5%**", "55.1%", False),  # measured: a different figure
+        ("ROA = (0.02)", "-0.02", True),
+        ("ROA = 0.02", "-0.02", False),
+    ],
+)
+def test_a_verified_figure_is_found_in_the_answer_by_value(answer, figure, kept):
+    assert states_figure(answer, figure) is kept

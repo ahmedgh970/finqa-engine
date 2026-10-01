@@ -23,6 +23,7 @@ from src.workflow.calculator import (
     compute,
     routes_to_calculator,
     rows_of,
+    states_figure,
 )
 from src.workflow.config import WorkflowConfig
 from src.workflow.expansion import expand
@@ -244,7 +245,7 @@ def make_generate(config: WorkflowConfig):
             # A verified figure handed to the generator can still be dropped or reworded
             # on its way into the answer, so whether it survived is recorded rather than
             # assumed.
-            "computed_used": bool(computed) and computed.strip("%") in text,
+            "computed_used": bool(computed) and states_figure(text, computed),
             "llm_calls": state.get("llm_calls", 0) + 1,
             "node_latencies": _timed(state, "generate", started),
         }

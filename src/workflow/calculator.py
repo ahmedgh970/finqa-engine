@@ -411,6 +411,27 @@ def parse_amount(printed: str) -> Decimal:
     return -value if negative else value
 
 
+_FIGURE = re.compile(r"\(\s*\d[\d,]*(?:\.\d+)?\s*\)|-?\d[\d,]*(?:\.\d+)?")
+
+
+def states_figure(text: str, figure: str) -> bool:
+    """Whether ``text`` states ``figure`` as a number, however it is formatted.
+
+    Compared by value, not by string: the generator writes a verified 3215.40 as
+    "$3,215.4 million" and 5818.00 as "$5,818" (measured), the same figure a substring
+    test reads as dropped. A different figure is not the same one rounded -- 55.5% for a
+    verified 55.1% is a figure the generator did not keep.
+    """
+    wanted = parse_amount(figure)
+    for match in _FIGURE.finditer(text):
+        try:
+            if parse_amount(match.group(0)) == wanted:
+                return True
+        except CalculationError:
+            continue
+    return False
+
+
 def check_row(row: Row, question: str | None) -> None:
     """Refuse a row whose own text says it is not what an annual, consolidated formula wants.
 
