@@ -334,13 +334,16 @@ make demo                     # API + UI on http://localhost:8000, traces on htt
 ```
 
 The UI draws the workflow as a diagram that lights up node by node while a question
-runs: the passages retrieved and reranked, each grade as the grader returns it, the
-neighbours expansion adds, whether the question is routed to the calculator, the
-formula and the table rows behind a verified figure, then the answer, the context it
-was read from and the time spent per step. Every switch of a workflow YAML is a control
-on the side — chunk size, reranker, prefetch and k, grader threshold and floor,
-expansion window, calculator, model, context window — so a configuration is changed
-per question instead of per file. Picking a FinanceBench question puts the expected
+runs: the dense shortlist with its cosine scores, then the passages the reranker kept
+and how far down the dense ranking each came from, each grade as the grader returns it,
+the neighbours expansion adds, whether the question is routed to the calculator, the
+formula and the table rows behind a verified figure, then the answer — flagged when it
+hit the output budget before concluding — the context it was read from and the time
+spent per step. Every switch of a workflow YAML is a control on the side — chunk size,
+reranker, prefetch and k, grader threshold and floor, expansion window, calculator,
+model, context window, answer length — so a configuration is changed per question
+instead of per file. One question runs at a time: stopping it, or asking another,
+abandons the LLM call in progress rather than letting it finish unseen. Picking a FinanceBench question puts the expected
 answer next to the generated one.
 
 *Recorded run* replays a question of the reference row (grade ≥ 2, window ±1,

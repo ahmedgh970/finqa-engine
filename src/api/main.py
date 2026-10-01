@@ -18,10 +18,11 @@ Everything is local (Ollama); no external provider.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
-import threading
+import queue
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
@@ -32,7 +33,14 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from src.api.demo import Replay, RunSettings, available_chunk_sizes, stream_run
+from src.api.demo import (
+    LiveRuns,
+    Replay,
+    RunSettings,
+    available_chunk_sizes,
+    report_dense_stage,
+    stream_run,
+)
 from src.llm.client import _model_name
 from src.retrieval.registry import build_retriever
 from src.workflow.config import WorkflowConfig, load_workflow_config
@@ -128,7 +136,7 @@ async def lifespan(app: FastAPI):
     cfg = load_workflow_config(WORKFLOW_CONFIG)
     _state["cfg"] = cfg
     # Loads the embedder and the reranker once; every graph shares this retriever.
-    _state["retriever"] = _GpuReleasing(build_retriever(cfg.retriever, cfg))
+    _state["retriever"] = _GpuReleasing(report_dense_stage(build_retriever(cfg.retriever, cfg)))
     _retrievers[(cfg.retriever, cfg.collection_name, cfg.rerank_prefetch)] = _state["retriever"]
     _get_graph(_config_for("workflow", None, None), "workflow")  # warm the default
     _warm_up(_state["retriever"])
@@ -147,14 +155,13 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 _retrievers: dict[tuple[str, str, int], object] = {}  # (retriever, collection, prefetch)
 _demo_graphs: dict[str, object] = {}  # settings JSON -> compiled graph
-# One run at a time: two would share one GPU and both crawl.
-_run_lock = threading.Lock()
+_live_runs = LiveRuns()
 
 
 def _retriever_for(cfg: WorkflowConfig):
     key = (cfg.retriever, cfg.collection_name, cfg.rerank_prefetch)
     if key not in _retrievers:
-        _retrievers[key] = _GpuReleasing(build_retriever(cfg.retriever, cfg))
+        _retrievers[key] = _GpuReleasing(report_dense_stage(build_retriever(cfg.retriever, cfg)))
     return _retrievers[key]
 
 
@@ -252,24 +259,37 @@ class RunRequest(BaseModel):
 
 
 @app.post("/demo/run")
-def demo_run(req: RunRequest) -> StreamingResponse:
-    """Run the workflow live with the UI's settings, streaming each node as it finishes."""
+async def demo_run(req: RunRequest) -> StreamingResponse:
+    """Run the workflow live with the UI's settings, streaming each node as it finishes.
+
+    A new run stops the one before it. A client that disconnects -- the UI's stop button
+    -- stops its run: the LLM call in progress is abandoned, the next one never made.
+    """
 
     def events():
-        if not _run_lock.acquire(blocking=False):
-            yield {"type": "error", "message": "Un run est déjà en cours : attendez sa fin."}
-            return
-        try:
-            yield {
-                "type": "plan",
-                "nodes": req.settings.plan(),
-                "settings": req.settings.model_dump(),
-            }
-            yield from stream_run(_graph_for(req.settings), req.question, req.doc_id)
-        finally:
-            _run_lock.release()
+        yield {"type": "plan", "nodes": req.settings.plan(), "settings": req.settings.model_dump()}
+        yield from stream_run(_graph_for(req.settings), req.question, req.doc_id)
 
-    return _sse(events())
+    run = await asyncio.to_thread(_live_runs.start, events)
+
+    async def encode():
+        try:
+            while True:
+                try:
+                    event = await asyncio.to_thread(run.queue.get, True, 0.5)
+                except queue.Empty:
+                    continue
+                if event is None:
+                    break
+                yield f"data: {json.dumps(event)}\n\n"
+        finally:
+            # Reached when the run ends and when the client leaves: either way nobody
+            # reads this run any more.
+            run.stop.set()
+
+    return StreamingResponse(
+        encode(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"}
+    )
 
 
 @app.get("/demo/replay/{qa_id}")

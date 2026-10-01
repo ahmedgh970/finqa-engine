@@ -234,6 +234,8 @@ button.ghost {
 .tag.floor { background: var(--flow-soft); color: var(--flow); }
 .tag.neighbour { background: #ece6f6; color: #5b3f91; }
 .tag.cut { background: var(--reserve-soft); color: var(--reserve); }
+.tag.climb { background: var(--verified-soft); color: var(--verified); font-weight: 600; }
+.plist .side { display: flex; gap: 6px; justify-content: flex-end; }
 .formula {
   font-family: var(--mono); font-size: 15px; background: var(--ink); color: #e8eef7;
   padding: 12px 14px; border-radius: 10px; overflow-x: auto; white-space: pre;
@@ -258,6 +260,10 @@ table.vars td.num { text-align: right; font-weight: 600; white-space: nowrap; }
 .verified strong { font-size: 22px; letter-spacing: -0.01em; }
 .verified span { font-size: 13px; }
 .verified.refused { border-color: var(--reserve); color: var(--reserve); }
+.notice {
+  margin-top: 12px; padding: 9px 12px; border-radius: var(--radius-sm); font-size: 14px;
+  background: var(--reserve-soft); color: #7a4207; border-left: 3px solid var(--reserve);
+}
 .answer-text { margin-top: 12px; font-size: 15px; max-height: 420px; overflow: auto; max-width: 75ch; }
 .answer-text p { margin: 0 0 8px; }
 .answer-text.pending { color: var(--ink-3); }

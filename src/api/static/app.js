@@ -155,6 +155,7 @@ function buildRail() {
   }
   segmented($("#keep_threshold"), [0, 1, 2, 3], (v) => `≥ ${v}`, (v) => update({ keep_threshold: v }));
   segmented($("#num_ctx"), [8192, 12288, 16384, 24576], (v) => `${v / 1024}K`, (v) => update({ num_ctx: v }));
+  segmented($("#max_tokens"), [512, 1024, 2048], (v) => `${v} tokens`, (v) => update({ max_tokens: v }));
   const models = o.models.length ? o.models : [o.defaults.model];
   put($("#model"), ...models.map((m) => el("option", { value: m, text: m })));
 
@@ -183,6 +184,7 @@ function renderRail() {
   setPressed($("#chunk_size"), s.chunk_size);
   setPressed($("#keep_threshold"), s.keep_threshold);
   setPressed($("#num_ctx"), s.num_ctx);
+  setPressed($("#max_tokens"), s.max_tokens ?? 1024);
   for (const id of ["reranker", "grading", "expansion", "calculator"]) $(`#${id}`).checked = s[id];
   for (const id of ["prefetch", "k", "min_chunks", "window"]) {
     $(`#${id}`).value = s[id];
@@ -362,6 +364,7 @@ function newRun(settings) {
     plan: [],
     passages: new Map(),
     retrieved: [],
+    dense: [],
     grades: [],
     kept: new Set(),
     floor: new Set(),
@@ -402,7 +405,9 @@ function startClock() {
 
 function markRunning(graphNode) {
   const run = state.run;
-  run.running = DRAWN[graphNode](run.settings);
+  // Retrieval runs its two stages in turn: the reranker lights up once the dense
+  // shortlist is reported.
+  run.running = graphNode === "retrieve" ? ["dense"] : DRAWN[graphNode](run.settings);
   run.runningSince = performance.now();
   for (const id of run.running) setNode(id, "running", "en cours");
   if (!state.pinned) select(run.running[run.running.length - 1]);
@@ -426,6 +431,23 @@ function onEvent(ev) {
     markRunning("retrieve");
     return;
   }
+  if (ev.type === "progress" && ev.stage === "dense") {
+    remember(ev.passages);
+    run.dense = ev.passages.map((p) => p.id);
+    ev.passages.forEach((p, i) => {
+      const known = run.passages.get(p.id);
+      known.denseRank = i + 1;
+      known.denseScore = p.score;
+    });
+    setNode("dense", "done", `${ev.passages.length} candidats`);
+    run.running = ["rerank"];
+    run.runningSince = performance.now();
+    setNode("rerank", "running", "en cours");
+    if (!state.pinned || state.pinned === "dense") renderInspector();
+    if (!state.pinned) select("rerank");
+    drawEdges();
+    return;
+  }
   if (ev.type === "progress" && ev.node === "grade") {
     run.grades[ev.index] = ev.grade;
     const cell = nodeEls.grade.g.querySelector(`.cell[data-i="${ev.index}"]`);
@@ -438,6 +460,7 @@ function onEvent(ev) {
   if (ev.type === "node") return onNode(ev);
   if (ev.type === "done") return onDone(ev);
   if (ev.type === "error") return onError(ev.message);
+  if (ev.type === "cancelled") return onError("Run interrompu : un autre run a démarré, ou il a été arrêté.");
 }
 
 function remember(passages) {
@@ -452,9 +475,18 @@ function onNode(ev) {
   if (ev.node === "retrieve") {
     remember(d.passages);
     run.retrieved = d.passages.map((p) => p.id);
-    d.passages.forEach((p, i) => (run.passages.get(p.id).rank = i + 1));
-    setNode("dense", "done", run.settings.reranker ? `${run.settings.prefetch} candidats` : `${d.passages.length} passages`);
-    if (run.settings.reranker) setNode("rerank", "done", `${d.passages.length} passages`);
+    d.passages.forEach((p, i) => {
+      const known = run.passages.get(p.id);
+      known.rank = i + 1;
+      known.score = p.score;
+    });
+    if (!run.dense.length) {
+      setNode("dense", "done", run.settings.reranker ? `${run.settings.prefetch} candidats` : `${d.passages.length} passages`);
+    }
+    if (run.settings.reranker) {
+      const climbed = d.passages.filter((p, i) => (run.passages.get(p.id).denseRank ?? 0) > d.passages.length).length;
+      setNode("rerank", "done", climbed ? `${plural(climbed, "remonté")} du dense` : `${d.passages.length} passages gardés`);
+    }
     drawCells(d.passages.length);
   } else if (ev.node === "grade") {
     run.grades = d.grades;
@@ -487,7 +519,9 @@ function onNode(ev) {
     run.answer = d.answer;
     run.promptTokens = d.prompt_tokens;
     run.dropped = d.n_dropped_to_fit;
-    setNode("generate", "done", `${thousands(d.prompt_tokens)} tokens lus`);
+    run.truncated = d.truncated;
+    if (d.truncated) setNode("generate", "done refused", `coupée à ${run.settings.max_tokens ?? 1024} tokens`);
+    else setNode("generate", "done", `${thousands(d.prompt_tokens)} tokens lus`);
     renderAnswer_();
   }
   run.running = [];
@@ -611,6 +645,7 @@ function clearPanes() {
   $("#answer-text").classList.add("pending");
   $("#answer-text").textContent = "Le modèle répond à la fin du workflow.";
   $("#verified").hidden = true;
+  $("#truncated").hidden = true;
   $("#metrics").hidden = true;
   renderGold();
   renderSources();
@@ -638,6 +673,11 @@ function renderAnswer_() {
   const box = $("#answer-text");
   box.classList.remove("pending");
   box.innerHTML = renderAnswer(run.answer || "");
+  const notice = $("#truncated");
+  notice.hidden = !run.truncated;
+  notice.textContent = run.truncated
+    ? `Réponse coupée : le modèle a atteint la limite de ${run.settings.max_tokens ?? 1024} tokens de sortie avant de conclure. Le texte ci-dessous est son raisonnement inachevé ; augmentez « Longueur maximale de la réponse » ou choisissez un modèle plus concis.`
+    : "";
   $("#answer-sub").textContent = `${run.settings.model}, à partir de ${run.context.length} passages.`;
 }
 
@@ -734,15 +774,24 @@ function plist(ids, opts = {}) {
       if (!p) return null;
       const i = run.retrieved.indexOf(id);
       const grade = i >= 0 ? run.grades[i] : null;
-      const out = opts.dimUnkept && run.kept.size && !run.kept.has(id);
+      const out = (opts.dimUnkept && run.kept.size && !run.kept.has(id)) || (opts.dimNotRetrieved && !run.retrieved.includes(id));
+      const score = opts.score === "dense" ? p.denseScore : p.score;
+      const side = opts.tags
+        ? passageTags(id)
+        : [
+            opts.showDenseRank && p.denseRank != null
+              ? el("span", { class: `tag${p.denseRank > run.retrieved.length ? " climb" : ""}`, title: "Rang dans la recherche dense", text: `dense ${p.denseRank}ᵉ` })
+              : null,
+            score != null ? el("span", { class: "tag", title: opts.score === "dense" ? "Similarité cosinus" : "Score du cross-encoder", text: score.toFixed(2) }) : null,
+          ];
       return el(
         "li",
         { class: out ? "out" : "" },
-        el("span", { class: "rank", text: String(opts.rankFromOrder ? n + 1 : p.rank ?? "") }),
+        el("span", { class: "rank", text: String(opts.rankFromOrder ? n + 1 : (opts.score === "dense" ? p.denseRank : p.rank) ?? "") }),
         el("i", { class: `g g${grade ?? 0}`, style: grade == null ? "opacity:.25" : "" }),
         el("span", { class: "where", title: p.doc_id, text: `p. ${p.page}` }),
         el("span", { class: "snip", text: snippet(p.text, 160) }),
-        el("span", {}, ...(opts.tags ? passageTags(id) : p.score != null ? [el("span", { class: "tag", text: p.score.toFixed(2) })] : [])),
+        el("span", { class: "side" }, ...side.filter((c) => c != null)),
       );
     }),
   );
@@ -770,9 +819,23 @@ function renderInspector() {
     if (id === "question") {
       parts.push(el("dl", { class: "kv" }, el("dt", { text: "Question" }), el("dd", { text: $("#question").value }), el("dt", { text: "Rapport" }), el("dd", { text: docLabel() || "Tous les rapports indexés" })));
     }
-    if ((id === "dense" || id === "rerank") && run.retrieved.length) {
-      parts.push(el("p", { class: "explain", text: `${run.retrieved.length} passages transmis${s.reranker ? `, classés par le reranker parmi ${s.prefetch} candidats ; le score est celui du cross-encoder` : ""}.` }));
+    if (id === "dense" && s.reranker && run.dense.length) {
+      const kept = run.retrieved.length;
+      parts.push(el("p", { class: "explain", text: kept ? `${run.dense.length} candidats classés par similarité cosinus. Les ${kept} que le reranker a retenus sont en clair, les autres estompés.` : `${run.dense.length} candidats classés par similarité cosinus, transmis au reranker.` }));
+      parts.push(plist(run.dense, { score: "dense", dimNotRetrieved: kept > 0 }));
+    } else if (id === "dense" && s.reranker && run.retrieved.length) {
+      parts.push(el("p", { class: "explain", text: "Les candidats de la recherche dense ne sont pas enregistrés pour ce run ; lancez la question en direct pour les voir." }));
+    } else if (id === "dense" && run.retrieved.length) {
+      parts.push(el("p", { class: "explain", text: `Sans reranker, les ${run.retrieved.length} premiers passages par similarité cosinus sont transmis tels quels.` }));
       parts.push(plist(run.retrieved));
+    }
+    if (id === "rerank" && run.retrieved.length) {
+      const climbed = run.retrieved.filter((pid) => (run.passages.get(pid).denseRank ?? 0) > run.retrieved.length).length;
+      const text = run.dense.length
+        ? `Le cross-encoder a relu les ${run.dense.length} candidats et en garde ${run.retrieved.length}.${climbed ? ` ${climbed} d'entre eux étaient hors du top ${run.retrieved.length} de la recherche dense : sans reranker, ils n'auraient pas été transmis.` : ""}`
+        : `${run.retrieved.length} passages retenus par le cross-encoder parmi ${s.prefetch} candidats.`;
+      parts.push(el("p", { class: "explain", text }));
+      parts.push(plist(run.retrieved, { showDenseRank: run.dense.length > 0 }));
     }
     if (id === "grade" && run.retrieved.length && run.grades.length) {
       const kept = run.kept.size;
@@ -830,7 +893,7 @@ function statementName(s) {
 
 function generateDetail(run) {
   const budget = run.settings.num_ctx;
-  const reserved = 1024 + 256;
+  const reserved = (run.settings.max_tokens ?? 1024) + 256;
   const used = run.promptTokens ?? 0;
   const pct = (n) => `${Math.min(100, (n / budget) * 100).toFixed(1)}%`;
   return [
@@ -838,6 +901,7 @@ function generateDetail(run) {
     el("div", { class: "gauge" }, el("i", { class: "used", style: `width:${pct(used)}` }), el("i", { class: "out", style: `width:${pct(reserved)}` })),
     el("div", { class: "gauge-legend" }, el("span", { text: "Contexte et instructions" }), el("span", { text: `Fenêtre de ${budget / 1024}K tokens` })),
     run.calc?.computed ? el("p", { class: "accepted", text: `Chiffre vérifié transmis : ${run.calc.computed}.` }) : null,
+    run.truncated ? el("p", { class: "refusal", text: `La génération s'est arrêtée sur la limite de ${run.settings.max_tokens ?? 1024} tokens de sortie (done_reason "length" renvoyé par Ollama) : la réponse est inachevée.` }) : null,
   ];
 }
 

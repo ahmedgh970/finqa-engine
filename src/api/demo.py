@@ -12,16 +12,21 @@ it received. Nothing is recomputed, so it is instant and the GPU stays free.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import queue
+import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Literal
 
 import yaml
+from langgraph.config import get_stream_writer
 from pydantic import BaseModel, Field
 
 from src.ingestion.schema import Chunk
+from src.llm.client import Cancelled, stoppable
 from src.llm.prompts import build_prompt
 from src.workflow.calculator import routes_to_calculator
 from src.workflow.config import WorkflowConfig
@@ -47,6 +52,7 @@ class RunSettings(BaseModel):
     window: int = Field(default=1, ge=0, le=6)
     calculator: bool = True
     num_ctx: int = Field(default=12288, ge=2048, le=32768)
+    max_tokens: int = Field(default=1024, ge=128, le=4096)
 
     @classmethod
     def from_config(cls, cfg: WorkflowConfig) -> RunSettings:
@@ -65,6 +71,7 @@ class RunSettings(BaseModel):
             window=cfg.expansion.window,
             calculator=cfg.calculator.enabled,
             num_ctx=cfg.llm.num_ctx or 12288,
+            max_tokens=cfg.llm.max_tokens,
         )
 
     def config(self, base: WorkflowConfig) -> WorkflowConfig:
@@ -89,7 +96,11 @@ class RunSettings(BaseModel):
                 ),
                 "calculator": base.calculator.model_copy(update={"enabled": self.calculator}),
                 "llm": base.llm.model_copy(
-                    update={"model": f"ollama_chat/{self.model}", "num_ctx": self.num_ctx}
+                    update={
+                        "model": f"ollama_chat/{self.model}",
+                        "num_ctx": self.num_ctx,
+                        "max_tokens": self.max_tokens,
+                    }
                 ),
             }
         )
@@ -114,6 +125,39 @@ def available_chunk_sizes(collections: list[str]) -> list[int]:
 
 
 # --- live runs ------------------------------------------------------------------------
+
+
+class DenseStageReporter:
+    """Wraps the first stage of a reranked retriever and reports what it found.
+
+    The graph's retrieve node returns the reranked top-k only: the shortlist the dense
+    search gave the cross-encoder, and its cosine scores, never leave the retriever.
+    Reported while the node runs, they let a UI show the two stages apart -- and which
+    passages the reranker pulled up from deep in the dense ranking. Outside a streamed
+    graph (``POST /ask``, a benchmark run) the report goes nowhere.
+    """
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    def retrieve(self, query: str, k: int = 5, doc_id: str | None = None):
+        results = self.inner.retrieve(query, k=k, doc_id=doc_id)
+        with contextlib.suppress(RuntimeError):  # not inside a graph run
+            get_stream_writer()(
+                {
+                    "node": "retrieve",
+                    "stage": "dense",
+                    "passages": [_passage(sc.chunk, sc.score) for sc in results],
+                }
+            )
+        return results
+
+
+def report_dense_stage(retriever):
+    """``retriever`` with its dense stage reporting, when it has one to report."""
+    if hasattr(retriever, "base") and not isinstance(retriever.base, DenseStageReporter):
+        retriever.base = DenseStageReporter(retriever.base)
+    return retriever
 
 
 def _passage(chunk: Chunk, score: float | None = None) -> dict:
@@ -173,6 +217,7 @@ def _summary(node: str, update: dict, question: str, known: set[str]) -> dict:
             "n_dropped_to_fit": update.get("n_dropped_to_fit", 0),
             "prompt_tokens": _prompt_tokens(question, sources),
             "computed_used": update.get("computed_used", False),
+            "truncated": update.get("truncated", False),
         }
     return {}
 
@@ -204,6 +249,63 @@ def stream_run(graph, question: str, doc_id: str | None) -> Iterator[dict]:
         "llm_calls": llm_calls,
         "node_latencies": latencies,
     }
+
+
+class LiveRun:
+    """One live question run in its own thread, its events queued for the request.
+
+    The thread, not the HTTP response, owns the run: a client that leaves mid-run only
+    stops reading, so the run is told to stop instead of being left to finish -- or to
+    hang -- with nobody listening. ``stop`` reaches the LLM client, which abandons the
+    call in progress; ``finished`` is set however the run ends.
+    """
+
+    def __init__(self, events: Callable[[], Iterator[dict]]):
+        self._events = events
+        self.queue: queue.Queue[dict | None] = queue.Queue()
+        self.stop = threading.Event()
+        self.finished = threading.Event()
+        self._thread = threading.Thread(target=self._work, name="demo-run", daemon=True)
+
+    def start(self) -> LiveRun:
+        self._thread.start()
+        return self
+
+    def _work(self) -> None:
+        try:
+            with stoppable(self.stop):
+                for event in self._events():
+                    self.queue.put(event)
+                    if self.stop.is_set():
+                        raise Cancelled
+        except Cancelled:
+            self.queue.put({"type": "cancelled", "message": "Run arrêté."})
+        except Exception as exc:  # shown in the UI rather than a dropped connection
+            self.queue.put({"type": "error", "message": str(exc)})
+        finally:
+            self.finished.set()
+            self.queue.put(None)
+
+
+class LiveRuns:
+    """At most one live run: starting one stops the run before it, then waits for it.
+
+    One GPU serves every run, so two at once would both crawl; and the run being
+    replaced is one its user abandoned (stopped, or changed a setting and asked again).
+    """
+
+    def __init__(self, wait_s: float = 30.0):
+        self._lock = threading.Lock()
+        self._active: LiveRun | None = None
+        self._wait_s = wait_s
+
+    def start(self, events: Callable[[], Iterator[dict]]) -> LiveRun:
+        with self._lock:
+            if self._active is not None:
+                self._active.stop.set()
+                self._active.finished.wait(self._wait_s)
+            self._active = LiveRun(events).start()
+            return self._active
 
 
 # --- recorded runs --------------------------------------------------------------------

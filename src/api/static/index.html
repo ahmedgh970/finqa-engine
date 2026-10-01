@@ -86,6 +86,9 @@
         <label class="field">Fenêtre de contexte
           <div class="seg" id="num_ctx"></div>
         </label>
+        <label class="field">Longueur maximale de la réponse
+          <div class="seg" id="max_tokens"></div>
+        </label>
       </fieldset>
     </aside>
 
@@ -138,6 +141,7 @@
             <p id="answer-sub">La réponse apparaît à la fin de la génération.</p>
           </div>
           <div id="verified" class="verified" hidden></div>
+          <p id="truncated" class="notice" hidden></p>
           <div id="answer-text" class="answer-text"></div>
           <div id="gold" class="gold" hidden></div>
           <dl id="metrics" class="metrics" hidden></dl>
