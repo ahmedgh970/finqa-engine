@@ -79,15 +79,15 @@ def report(budget: int, lens: np.ndarray, is_table: np.ndarray) -> None:
     print(f"\n===== max_tokens = {budget}  ({len(lens):,} chunks) =====")
     print(
         f"  mean={lens.mean():6.1f}  median={np.median(lens):5.0f}  "
-        f"p90={np.percentile(lens,90):4.0f}  p95={np.percentile(lens,95):4.0f}  max={lens.max():4d}"
+        f"p90={np.percentile(lens, 90):4.0f}  p95={np.percentile(lens, 95):4.0f}  max={lens.max():4d}"
     )
     print(
-        f"  fill: {100*np.mean(lens>=0.9*budget):5.1f}% >=90% cap | "
-        f"{100*np.mean(lens<=0.25*budget):5.1f}% <=25% (tiny) | {100*over.mean():4.1f}% over cap"
+        f"  fill: {100 * np.mean(lens >= 0.9 * budget):5.1f}% >=90% cap | "
+        f"{100 * np.mean(lens <= 0.25 * budget):5.1f}% <=25% (tiny) | {100 * over.mean():4.1f}% over cap"
     )
     print(
-        f"  tables: {100*is_table.mean():4.1f}% of all chunks | "
-        f"{100*is_table[over].mean():4.1f}% of OVER-cap chunks  (x{lift:.1f} lift)"
+        f"  tables: {100 * is_table.mean():4.1f}% of all chunks | "
+        f"{100 * is_table[over].mean():4.1f}% of OVER-cap chunks  (x{lift:.1f} lift)"
     )
 
 
