@@ -426,3 +426,17 @@ def test_the_calculator_row_differs_from_the_reference_row_by_one_switch():
     ).model_dump()
     assert {k for k in base if base[k] != with_calc[k]} == {"name", "calculator"}
     assert with_calc["calculator"]["enabled"] and not base["calculator"]["enabled"]
+
+
+def test_an_answer_cut_by_the_output_budget_is_flagged(monkeypatch):
+    from src.llm.client import Completion, _completion
+
+    monkeypatch.setattr(
+        "src.workflow.nodes.generate", lambda prompt, config: _completion("Step 1", "length")
+    )
+    result = answer_workflow("q", FakeRetriever([_chunk(0)]), _config(k=1), doc_id="DOC_2022_10K")
+    # The state keeps plain text: the flag travels on its own, not on the string.
+    assert result.truncated and result.answer == "Step 1"
+    assert not isinstance(result.answer, Completion)
+    monkeypatch.setattr("src.workflow.nodes.generate", lambda prompt, config: "plain answer")
+    assert not answer_workflow("q", FakeRetriever([_chunk(0)]), _config(k=1)).truncated
