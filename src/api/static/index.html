@@ -164,11 +164,10 @@
   <section id="prod" class="results" hidden aria-label="Architecture de production">
     <header class="results-head">
       <h2>En production</h2>
-      <p>Le même workflow, servi pour de vrai : l'API ne fait plus que l'orchestration, chaque modèle devient un service qui se dimensionne seul. Survolez une étape du workflow pour voir le service qu'elle appelle.</p>
     </header>
 
     <article class="sheet arch-sheet">
-      <svg class="arch" viewBox="0 0 1180 620" role="img" aria-label="Architecture cible : gateway, API FastAPI avec le workflow LangGraph, vLLM, TEI, Qdrant, observabilité, CI et ingestion">
+      <svg class="arch" viewBox="0 0 1180 620" role="img" aria-label="Architecture de production : gateway, API FastAPI avec le workflow LangGraph, vLLM, TEI, Qdrant, observabilité, CI et ingestion">
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0 0 L10 5 L0 10 z" fill="#7b8aa0"/>
@@ -289,16 +288,16 @@
 
     <div class="sheets-2">
       <article class="sheet">
-        <h3>De la démo à la production</h3>
+        <h3>Développement et production</h3>
         <table class="figures map">
-          <thead><tr><th>Aujourd'hui (démo)</th><th>En production</th></tr></thead>
+          <thead><tr><th>Développement</th><th>Production</th></tr></thead>
           <tbody>
             <tr><td>Ollama, un utilisateur</td><td>vLLM, requêtes simultanées</td></tr>
             <tr><td>Embedder et reranker dans l'API</td><td>TEI, service à part</td></tr>
             <tr><td>Grading séquentiel (20 appels)</td><td>20 appels en parallèle sur vLLM</td></tr>
             <tr><td>Expansion lue dans un fichier JSONL</td><td>voisins lus dans Qdrant</td></tr>
             <tr><td>Phoenix en local</td><td>Langfuse + Prometheus / Grafana</td></tr>
-            <tr><td>make demo, GPU laptop 8 Go</td><td>VM GPU (PME) ou Kubernetes (grand groupe)</td></tr>
+            <tr><td>docker compose, un GPU de 8 Go</td><td>VM GPU (PME) ou Kubernetes (grand groupe)</td></tr>
             <tr><td>pas d'authentification</td><td>gateway SSO, filtre client côté serveur</td></tr>
           </tbody>
         </table>
@@ -411,7 +410,7 @@
           <div><dt>Faux acceptés</dt><dd>0</dd></div>
           <div><dt>Réponses changées hors calcul</dt><dd>0 / 120</dd></div>
         </dl>
-        <p class="takeaway">Sur le run de référence, 11 calculs sur 11 sont justes et les 120 questions non routées gardent une réponse identique. Le gain net est d'une bonne réponse, dans le bruit : l'apport, c'est un chiffre vérifié par le code, avec ses lignes sources. En démo avec qwen3.5:4b, un faux accepté a été trouvé (le chiffre d'affaires 2019 pour une formule « FY2020 revenue ») : il a donné une règle de plus, sans aucune régression sur les 90 extractions rejouées.</p>
+        <p class="takeaway">Sur le run de référence, 11 calculs sur 11 sont justes et les 120 questions non routées gardent une réponse identique. Le gain net est d'une bonne réponse, dans le bruit : l'apport, c'est un chiffre vérifié par le code, avec ses lignes sources. Lors d'un test avec qwen3.5:4b, un faux accepté a été trouvé (le chiffre d'affaires 2019 pour une formule « FY2020 revenue ») : il a donné une règle de plus, sans aucune régression sur les 90 extractions rejouées.</p>
       </article>
     </div>
 
@@ -421,7 +420,7 @@
         <li>Une grille à cinq issues sépare « le modèle s'est trompé » de « la preuve n'était pas dans le contexte » : elle dit quel étage corriger.</li>
         <li>Le juge local (qwen3.5:9b) a été validé contre une référence sur des runs qui n'ont pas servi à le régler (kappa 0.81).</li>
         <li>La recherche est rejouée à l'identique : deux lignes ne diffèrent que par l'étage testé.</li>
-        <li>Modèles open-weight en 4 bits (Q4_K_M), latences mesurées sur un GPU laptop de 8 Go ; chaque décision est consignée dans une ADR.</li>
+        <li>Modèles open-weight en 4 bits (Q4_K_M), latences mesurées sur un GPU de 8 Go ; chaque décision est consignée dans une ADR.</li>
       </ul>
     </article>
   </section>
