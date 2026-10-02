@@ -11,6 +11,19 @@
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+          <symbol id="i-search" viewBox="0 0 18 18"><circle cx="7.5" cy="7.5" r="5"/><path d="M11.3 11.3 L16 16"/></symbol>
+          <symbol id="i-sort" viewBox="0 0 18 18"><path d="M2 4 H16 M2 9 H12 M2 14 H8"/></symbol>
+          <symbol id="i-check" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7"/><path d="M5.5 9.2 L8 11.6 L12.6 6.6"/></symbol>
+          <symbol id="i-expand" viewBox="0 0 18 18"><path d="M1.5 9 H16.5 M1.5 9 L4.5 6 M1.5 9 L4.5 12 M16.5 9 L13.5 6 M16.5 9 L13.5 12"/></symbol>
+          <symbol id="i-branch" viewBox="0 0 18 18"><path d="M4 16 V2 M4 9 C9 9 10 4 15 4"/><circle cx="15" cy="4" r="1.6"/></symbol>
+          <symbol id="i-calc" viewBox="0 0 18 18"><rect x="3" y="1.5" width="12" height="15" rx="2"/><path d="M6 5 H12 M6 9 H7 M9 9 H10 M12 9 H12.5 M6 12.5 H7 M9 12.5 H10 M12 12.5 H12.5"/></symbol>
+          <symbol id="i-pen" viewBox="0 0 18 18"><path d="M2 4 H16 M2 9 H16 M2 14 H10"/></symbol>
+          <symbol id="i-users" viewBox="0 0 18 18"><circle cx="6.5" cy="6" r="3"/><path d="M1 16 C1 12 3.5 10.5 6.5 10.5 C9.5 10.5 12 12 12 16"/><circle cx="13" cy="6.5" r="2.4"/><path d="M13 10.8 C15.5 10.8 17 12.3 17 15.5"/></symbol>
+      <symbol id="i-question" viewBox="0 0 18 18"><path d="M2 3.5 A1.5 1.5 0 0 1 3.5 2 H14.5 A1.5 1.5 0 0 1 16 3.5 V11 A1.5 1.5 0 0 1 14.5 12.5 H7 L3.5 15.5 V12.5 A1.5 1.5 0 0 1 2 11 Z"/></symbol>
+    </defs>
+  </svg>
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"></span>
@@ -26,6 +39,7 @@
       <button role="tab" id="mode-prod" aria-selected="false">En production</button>
     </div>
     <div class="status">
+      <span class="stack" aria-label="Outils"><img src="/static/logos/langgraph.svg" alt="LangGraph" title="LangGraph"><img src="/static/logos/fastapi.svg" alt="FastAPI" title="FastAPI"><img src="/static/logos/qdrant.svg" alt="Qdrant" title="Qdrant"><img src="/static/logos/huggingface.svg" alt="Hugging Face : BGE-M3, reranker" title="Hugging Face : BGE-M3, reranker"><img src="/static/logos/ollama.svg" alt="Ollama" title="Ollama"></span>
       <span id="status-dot" class="dot"></span><span id="status-text">Connexion…</span>
       <a id="phoenix-link" class="phoenix" href="#" target="_blank" rel="noopener" hidden>Traces Phoenix</a>
     </div>
@@ -89,7 +103,7 @@
         <label class="field">Fenêtre de contexte
           <div class="seg" id="num_ctx"></div>
         </label>
-        <label class="field">Longueur maximale de la réponse
+        <label class="field">Longueur maximale de la réponse (tokens)
           <div class="seg" id="max_tokens"></div>
         </label>
       </fieldset>
@@ -119,7 +133,7 @@
         </div>
         <div id="banner" class="banner" hidden></div>
         <div class="diagram-wrap">
-          <svg id="diagram" viewBox="0 0 1310 300" role="img" aria-label="Diagramme du workflow"></svg>
+          <svg id="diagram" viewBox="0 0 1310 330" role="img" aria-label="Diagramme du workflow"></svg>
         </div>
         <ol class="legend" aria-label="Notes du grader">
           <li><i class="g g0"></i>0 hors sujet</li>
@@ -167,122 +181,153 @@
     </header>
 
     <article class="sheet arch-sheet">
-      <svg class="arch" viewBox="0 0 1180 620" role="img" aria-label="Architecture de production : gateway, API FastAPI avec le workflow LangGraph, vLLM, TEI, Qdrant, observabilité, CI et ingestion">
+      <svg class="arch" viewBox="0 0 1184 720" role="img" aria-label="Architecture de production : gateway, API FastAPI avec le workflow LangGraph, vLLM, TEI, Qdrant, observabilité, CI et ingestion">
         <defs>
-          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M0 0 L10 5 L0 10 z" fill="#7b8aa0"/>
-          </marker>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7b8aa0"/></marker>
         </defs>
 
-        <!-- entry -->
-        <g class="box"><rect x="20" y="30" width="200" height="64" rx="10"/>
-          <text class="t" x="36" y="56">Utilisateurs</text><text class="s" x="36" y="76">UI, applications métier</text></g>
-        <g class="box"><rect x="20" y="124" width="200" height="72" rx="10"/>
-          <text class="t" x="36" y="150">Gateway</text><text class="s" x="36" y="170">SSO, quotas, TLS</text><text class="s" x="36" y="186">filtre client imposé</text></g>
-        <path class="pipe" d="M120 94 V124" marker-end="url(#arrow)"/>
-        <path class="pipe" d="M220 160 H250" marker-end="url(#arrow)"/>
+        <!-- zones -->
+        <g class="zone"><rect x="16" y="16" width="232" height="214" rx="16"/><text x="32" y="38">Accès</text></g>
+        <g class="zone"><rect x="16" y="246" width="232" height="286" rx="16"/><text x="32" y="268">Exploitation</text></g>
+        <g class="zone"><rect x="862" y="16" width="322" height="516" rx="16"/><text x="878" y="34">Modèles et données</text></g>
+        <g class="zone"><rect x="264" y="548" width="920" height="156" rx="16"/><text x="282" y="572">Ingestion en batch, à l'arrivée d'un rapport</text></g>
 
-        <!-- API with the workflow inside -->
-        <g class="api"><rect x="250" y="20" width="560" height="430" rx="14"/>
-          <text class="t" x="270" y="48">API FastAPI</text>
-          <text class="s" x="270" y="68">sans état, N réplicas, conteneurs CPU</text>
-          <text class="k" x="270" y="96">Workflow LangGraph, inchangé</text></g>
+        <!-- access -->
+        <g class="box"><rect x="32" y="50" width="200" height="62" rx="11"/>
+          <use class="ico" href="#i-users" x="48" y="62" width="20" height="20"/>
+          <text class="t" x="76" y="77">Utilisateurs</text><text class="s" x="76" y="97">UI, applications métier</text></g>
+        <g class="box"><rect x="32" y="138" width="200" height="80" rx="11"/>
+          <text class="t" x="48" y="162">Gateway</text>
+          <image href="/static/logos/kong.svg" x="172" y="148" width="20" height="20"/><image href="/static/logos/keycloak.svg" x="198" y="148" width="20" height="20"/>
+          <text class="s" x="48" y="184">SSO, quotas, TLS</text><text class="s" x="48" y="202">filtre client imposé</text></g>
+        <path class="pipe" d="M132 112 V138" marker-end="url(#arrow)"/>
+        <path class="pipe" d="M232 178 H280" marker-end="url(#arrow)"/>
+
+        <!-- operations -->
+        <g class="box"><rect x="32" y="282" width="200" height="132" rx="11"/>
+          <text class="t" x="48" y="306">Observabilité</text>
+          <image href="/static/logos/opentelemetry.svg" x="48" y="318" width="16" height="16"/><text class="s" x="72" y="331">OpenTelemetry, traces</text>
+          <image href="/static/logos/langfuse.svg" x="48" y="342" width="16" height="16"/><text class="s" x="72" y="355">Langfuse : prompts, tokens</text>
+          <image href="/static/logos/prometheus.svg" x="48" y="366" width="16" height="16"/><image href="/static/logos/grafana.svg" x="68" y="366" width="16" height="16"/><text class="s" x="92" y="379">Prometheus, Grafana</text>
+          <text class="s" x="92" y="398">latence p95, GPU</text></g>
+        <path class="pipe dashed" d="M280 348 H232" marker-end="url(#arrow)"/>
+        <g class="box"><rect x="32" y="430" width="200" height="86" rx="11"/>
+          <image href="/static/logos/githubactions.svg" x="48" y="444" width="20" height="20"/><text class="t" x="76" y="459">CI/CD</text>
+          <text class="s" x="48" y="482">tests + éval rejouée</text><text class="s" x="48" y="500">canary si pas de baisse</text></g>
+        <path class="pipe" d="M232 472 H280" marker-end="url(#arrow)"/>
+
+        <!-- application -->
+        <g class="api"><rect x="280" y="32" width="524" height="484" rx="16"/>
+          <image href="/static/logos/fastapi.svg" x="298" y="48" width="24" height="24"/><text class="t big" x="330" y="66">API FastAPI</text>
+          <text class="s" x="330" y="86">sans état, N réplicas, conteneurs CPU</text>
+          <image href="/static/logos/langgraph.svg" x="298" y="104" width="16" height="16"/><text class="k" x="320" y="117">Workflow LangGraph</text></g>
         <g class="wf" data-node="retrieve" data-calls="tei qdrant" tabindex="0">
-          <rect x="280" y="108" width="500" height="34" rx="8"/>
-          <text class="n" x="294" y="130">1</text>
-          <text class="t" x="314" y="130">Recherche dense</text>
-          <text class="s" x="470" y="130">question → vecteur (TEI) → candidats (Qdrant)</text>
+          <rect x="298" y="130" width="488" height="38" rx="9"/>
+          <circle class="num" cx="318" cy="149" r="10"/><text class="numt" x="318" y="153" text-anchor="middle">1</text>
+          <use href="#i-search" x="336" y="140" width="18" height="18"/>
+          <text class="t" x="364" y="154">Recherche dense</text>
+          <text class="s" x="500" y="153">question → vecteur → 50 candidats</text>
+          <circle class="chip" cx="766" cy="149" r="12"/><image href="/static/logos/qdrant.svg" x="759" y="142" width="14" height="14"/><circle class="chip" cx="736" cy="149" r="12"/><image href="/static/logos/huggingface.svg" x="729" y="142" width="14" height="14"/>
         </g>
         <g class="wf" data-node="rerank" data-calls="tei" tabindex="0">
-          <rect x="280" y="152" width="500" height="34" rx="8"/>
-          <text class="n" x="294" y="174">2</text>
-          <text class="t" x="314" y="174">Reranker</text>
-          <text class="s" x="470" y="174">50 candidats rescorés (TEI /rerank)</text>
+          <rect x="298" y="176" width="488" height="38" rx="9"/>
+          <circle class="num" cx="318" cy="195" r="10"/><text class="numt" x="318" y="199" text-anchor="middle">2</text>
+          <use href="#i-sort" x="336" y="186" width="18" height="18"/>
+          <text class="t" x="364" y="200">Reranker</text>
+          <text class="s" x="500" y="199">50 candidats rescorés → top 20</text>
+          <circle class="chip" cx="766" cy="195" r="12"/><image href="/static/logos/huggingface.svg" x="759" y="188" width="14" height="14"/>
         </g>
         <g class="wf" data-node="grade" data-calls="vllm" tabindex="0">
-          <rect x="280" y="196" width="500" height="34" rx="8"/>
-          <text class="n" x="294" y="218">3</text>
-          <text class="t" x="314" y="218">Grader LLM</text>
-          <text class="s" x="470" y="218">20 appels en parallèle (vLLM)</text>
+          <rect x="298" y="222" width="488" height="38" rx="9"/>
+          <circle class="num" cx="318" cy="241" r="10"/><text class="numt" x="318" y="245" text-anchor="middle">3</text>
+          <use href="#i-check" x="336" y="232" width="18" height="18"/>
+          <text class="t" x="364" y="246">Grader LLM</text>
+          <text class="s" x="500" y="245">20 notes en parallèle</text>
+          <circle class="chip" cx="766" cy="241" r="12"/><image href="/static/logos/vllm.svg" x="759" y="234" width="14" height="14"/>
         </g>
         <g class="wf" data-node="expand" data-calls="qdrant" tabindex="0">
-          <rect x="280" y="240" width="500" height="34" rx="8"/>
-          <text class="n" x="294" y="262">4</text>
-          <text class="t" x="314" y="262">Expansion</text>
-          <text class="s" x="470" y="262">chunks voisins lus dans Qdrant</text>
+          <rect x="298" y="268" width="488" height="38" rx="9"/>
+          <circle class="num" cx="318" cy="287" r="10"/><text class="numt" x="318" y="291" text-anchor="middle">4</text>
+          <use href="#i-expand" x="336" y="278" width="18" height="18"/>
+          <text class="t" x="364" y="292">Expansion</text>
+          <text class="s" x="500" y="291">chunks voisins du même rapport</text>
+          <circle class="chip" cx="766" cy="287" r="12"/><image href="/static/logos/qdrant.svg" x="759" y="280" width="14" height="14"/>
         </g>
         <g class="wf" data-node="route" data-calls="" tabindex="0">
-          <rect x="280" y="284" width="500" height="34" rx="8"/>
-          <text class="n" x="294" y="306">5</text>
-          <text class="t" x="314" y="306">Routage</text>
-          <text class="s" x="470" y="306">code, aucun modèle</text>
+          <rect x="298" y="314" width="488" height="38" rx="9"/>
+          <circle class="num" cx="318" cy="333" r="10"/><text class="numt" x="318" y="337" text-anchor="middle">5</text>
+          <use href="#i-branch" x="336" y="324" width="18" height="18"/>
+          <text class="t" x="364" y="338">Routage</text>
+          <text class="s" x="500" y="337">règle de code, sans modèle</text>
+
         </g>
         <g class="wf" data-node="calculate" data-calls="vllm" tabindex="0">
-          <rect x="280" y="328" width="500" height="34" rx="8"/>
-          <text class="n" x="294" y="350">6</text>
-          <text class="t" x="314" y="350">Calculatrice</text>
-          <text class="s" x="470" y="350">formule (vLLM), calcul en Decimal</text>
+          <rect x="298" y="360" width="488" height="38" rx="9"/>
+          <circle class="num" cx="318" cy="379" r="10"/><text class="numt" x="318" y="383" text-anchor="middle">6</text>
+          <use href="#i-calc" x="336" y="370" width="18" height="18"/>
+          <text class="t" x="364" y="384">Calculatrice</text>
+          <text class="s" x="500" y="383">formule par le LLM, calcul exact</text>
+          <circle class="chip" cx="766" cy="379" r="12"/><image href="/static/logos/vllm.svg" x="759" y="372" width="14" height="14"/>
         </g>
         <g class="wf" data-node="generate" data-calls="vllm" tabindex="0">
-          <rect x="280" y="372" width="500" height="34" rx="8"/>
-          <text class="n" x="294" y="394">7</text>
-          <text class="t" x="314" y="394">Génération</text>
-          <text class="s" x="470" y="394">réponse + sources (vLLM, streamée)</text>
+          <rect x="298" y="406" width="488" height="38" rx="9"/>
+          <circle class="num" cx="318" cy="425" r="10"/><text class="numt" x="318" y="429" text-anchor="middle">7</text>
+          <use href="#i-pen" x="336" y="416" width="18" height="18"/>
+          <text class="t" x="364" y="430">Génération</text>
+          <text class="s" x="500" y="429">réponse citée, streamée</text>
+          <circle class="chip" cx="766" cy="425" r="12"/><image href="/static/logos/vllm.svg" x="759" y="418" width="14" height="14"/>
         </g>
+        <g class="deploy"><image href="/static/logos/docker.svg" x="298" y="470" width="20" height="20"/><image href="/static/logos/kubernetes.svg" x="326" y="470" width="20" height="20"/><text class="s" x="354" y="485">conteneurs Docker, VM GPU ou Kubernetes</text></g>
 
-        <!-- model services -->
-        <path class="call" data-from="retrieve" d="M780 125 C835 125 830 222 880 222"/>
-        <path class="call" data-from="retrieve" d="M780 125 C845 125 825 352 880 352"/>
-        <path class="call" data-from="rerank" d="M780 169 C830 169 830 252 880 252"/>
-        <path class="call" data-from="grade" d="M780 213 C835 213 830 82 880 82"/>
-        <path class="call" data-from="expand" d="M780 257 C840 257 825 392 880 392"/>
-        <path class="call" data-from="calculate" d="M780 345 C845 345 825 112 880 112"/>
-        <path class="call" data-from="generate" d="M780 389 C850 389 820 142 880 142"/>
-        <g class="svc" data-svc="vllm"><rect x="880" y="30" width="280" height="140" rx="12"/>
-          <text class="t" x="898" y="58">vLLM</text>
-          <text class="s" x="898" y="80">LLM : granite4.1:8b</text>
-          <text class="s" x="898" y="100">batching continu, PagedAttention</text>
-          <text class="s" x="898" y="120">sorties JSON guidées par schéma</text>
-          <text class="s" x="898" y="152">GPU 24 Go (L4, A10G)</text></g>
-        <g class="svc" data-svc="tei"><rect x="880" y="190" width="280" height="110" rx="12"/>
-          <text class="t" x="898" y="218">TEI</text>
-          <text class="s" x="898" y="240">BGE-M3 : /embed</text>
-          <text class="s" x="898" y="260">bge-reranker : /rerank</text>
-          <text class="s" x="898" y="284">petit GPU ou CPU</text></g>
-        <g class="svc" data-svc="qdrant"><rect x="880" y="320" width="280" height="120" rx="12"/>
-          <text class="t" x="898" y="348">Qdrant</text>
-          <text class="s" x="898" y="370">vecteurs + métadonnées</text>
-          <text class="s" x="898" y="390">filtre par client et par rapport</text>
-          <text class="s" x="898" y="414">alias : réindexer sans coupure</text></g>
+        <!-- service buses -->
+        <path class="bus" data-svc="tei" style="--c:#E39B00" d="M822 149 V271 M822 271 H878"/>
+        <path class="bus" data-svc="qdrant" style="--c:#DC244C" d="M838 149 V427 M838 427 H878"/>
+        <path class="bus" data-svc="vllm" style="--c:#1F8FE5" d="M854 115 V425 M854 115 H878"/>
+        <path class="call" data-from="retrieve" data-svc="tei" style="--c:#E39B00" d="M786 149 H822"/><circle class="joint" data-from="retrieve" style="--c:#E39B00" cx="822" cy="149" r="3.2"/>
+        <path class="call" data-from="retrieve" data-svc="qdrant" style="--c:#DC244C" d="M786 149 H838"/><circle class="joint" data-from="retrieve" style="--c:#DC244C" cx="838" cy="149" r="3.2"/>
+        <path class="call" data-from="rerank" data-svc="tei" style="--c:#E39B00" d="M786 195 H822"/><circle class="joint" data-from="rerank" style="--c:#E39B00" cx="822" cy="195" r="3.2"/>
+        <path class="call" data-from="grade" data-svc="vllm" style="--c:#1F8FE5" d="M786 241 H854"/><circle class="joint" data-from="grade" style="--c:#1F8FE5" cx="854" cy="241" r="3.2"/>
+        <path class="call" data-from="expand" data-svc="qdrant" style="--c:#DC244C" d="M786 287 H838"/><circle class="joint" data-from="expand" style="--c:#DC244C" cx="838" cy="287" r="3.2"/>
+        <path class="call" data-from="calculate" data-svc="vllm" style="--c:#1F8FE5" d="M786 379 H854"/><circle class="joint" data-from="calculate" style="--c:#1F8FE5" cx="854" cy="379" r="3.2"/>
+        <path class="call" data-from="generate" data-svc="vllm" style="--c:#1F8FE5" d="M786 425 H854"/><circle class="joint" data-from="generate" style="--c:#1F8FE5" cx="854" cy="425" r="3.2"/>
 
-        <!-- observability & delivery -->
-        <g class="box side"><rect x="20" y="230" width="200" height="120" rx="10"/>
-          <text class="t" x="36" y="256">Observabilité</text>
-          <text class="s" x="36" y="278">OpenTelemetry → Langfuse :</text>
-          <text class="s" x="36" y="296">traces, prompts, tokens</text>
-          <text class="s" x="36" y="318">Prometheus + Grafana :</text>
-          <text class="s" x="36" y="336">latence p95, GPU, refus</text></g>
-        <path class="pipe dashed" d="M250 290 H220" marker-end="url(#arrow)"/>
-        <g class="box side"><rect x="20" y="370" width="200" height="80" rx="10"/>
-          <text class="t" x="36" y="396">CI/CD</text>
-          <text class="s" x="36" y="418">tests + éval rejouée</text>
-          <text class="s" x="36" y="436">canary si pas de baisse</text></g>
-        <path class="pipe" d="M220 410 H250" marker-end="url(#arrow)"/>
+        <!-- models and data -->
+        <g class="svc" data-svc="vllm"><rect x="878" y="40" width="290" height="150" rx="12"/>
+          <image href="/static/logos/vllm.svg" x="896" y="56" width="28" height="28"/><text class="t big" x="934" y="77">vLLM</text>
+          <text class="s" x="896" y="108">LLM : granite4.1:8b</text>
+          <text class="s" x="896" y="128">batching continu, PagedAttention</text>
+          <text class="s" x="896" y="148">sorties JSON guidées par schéma</text>
+          <image href="/static/logos/nvidia.svg" x="896" y="162" width="16" height="16"/><text class="s strong" x="918" y="175">GPU 24 Go (L4, A10G)</text></g>
+        <g class="svc" data-svc="tei"><rect x="878" y="206" width="290" height="130" rx="12"/>
+          <image href="/static/logos/huggingface.svg" x="896" y="222" width="28" height="28"/><text class="t big" x="934" y="236">TEI</text>
+          <text class="s" x="934" y="254">Text Embeddings Inference</text>
+          <text class="s" x="896" y="282">BGE-M3 : /embed</text>
+          <text class="s" x="896" y="302">bge-reranker : /rerank</text>
+          <text class="s strong" x="896" y="324">petit GPU ou CPU</text></g>
+        <g class="svc" data-svc="qdrant"><rect x="878" y="352" width="290" height="150" rx="12"/>
+          <image href="/static/logos/qdrant.svg" x="896" y="368" width="28" height="28"/><text class="t big" x="934" y="389">Qdrant</text>
+          <text class="s" x="896" y="420">vecteurs + métadonnées</text>
+          <text class="s" x="896" y="440">filtre par client et par rapport</text>
+          <text class="s" x="896" y="460">alias : réindexer sans coupure</text>
+          <text class="s strong" x="896" y="486">cluster ou Qdrant Cloud</text></g>
 
-        <!-- batch ingestion -->
-        <text class="k" x="250" y="500">Ingestion en batch, à l'arrivée d'un rapport</text>
-        <g class="box"><rect x="250" y="516" width="190" height="64" rx="10"/>
-          <text class="t" x="266" y="542">Stockage objet</text><text class="s" x="266" y="562">rapports PDF (S3)</text></g>
-        <g class="box"><rect x="470" y="516" width="190" height="64" rx="10"/>
-          <text class="t" x="486" y="542">Worker Docling</text><text class="s" x="486" y="562">parse + chunks (GPU)</text></g>
-        <g class="box"><rect x="690" y="516" width="160" height="64" rx="10"/>
-          <text class="t" x="706" y="542">TEI</text><text class="s" x="706" y="562">embeddings en lot</text></g>
-        <g class="box"><rect x="880" y="516" width="280" height="64" rx="10"/>
-          <text class="t" x="898" y="542">Upsert Qdrant</text><text class="s" x="898" y="562">ids déterministes, idempotent</text></g>
-        <path class="pipe" d="M440 548 H470" marker-end="url(#arrow)"/>
-        <path class="pipe" d="M660 548 H690" marker-end="url(#arrow)"/>
-        <path class="pipe" d="M850 548 H880" marker-end="url(#arrow)"/>
-        <path class="pipe" d="M1020 516 V440" marker-end="url(#arrow)"/>
+        <!-- ingestion -->
+        <g class="box"><rect x="282" y="588" width="200" height="96" rx="11"/>
+          <image href="/static/logos/minio.svg" x="298" y="604" width="22" height="22"/><text class="t" x="330" y="620">Stockage objet</text>
+          <text class="s" x="298" y="650">rapports PDF</text><text class="s" x="298" y="668">S3 ou MinIO</text></g>
+        <g class="box"><rect x="512" y="588" width="200" height="96" rx="11"/>
+          <image href="/static/logos/docling.svg" x="528" y="602" width="26" height="26"/><text class="t" x="562" y="620">Worker Docling</text>
+          <text class="s" x="528" y="650">parse + chunks</text><text class="s" x="528" y="668">GPU, à la demande</text></g>
+        <g class="box"><rect x="742" y="588" width="176" height="96" rx="11"/>
+          <image href="/static/logos/huggingface.svg" x="758" y="604" width="22" height="22"/><text class="t" x="790" y="620">TEI</text>
+          <text class="s" x="758" y="650">embeddings</text><text class="s" x="758" y="668">en lot</text></g>
+        <g class="box"><rect x="948" y="588" width="220" height="96" rx="11"/>
+          <image href="/static/logos/qdrant.svg" x="964" y="604" width="22" height="22"/><text class="t" x="996" y="620">Upsert Qdrant</text>
+          <text class="s" x="964" y="650">ids déterministes</text><text class="s" x="964" y="668">idempotent</text></g>
+        <path class="pipe" d="M482 636 H512" marker-end="url(#arrow)"/>
+        <path class="pipe" d="M712 636 H742" marker-end="url(#arrow)"/>
+        <path class="pipe" d="M918 636 H948" marker-end="url(#arrow)"/>
+        <path class="pipe" d="M1058 588 V502" marker-end="url(#arrow)"/>
       </svg>
     </article>
 
@@ -323,10 +368,14 @@
 
     <article class="sheet">
       <h3>L'échelle du workflow, à 12K tokens de contexte</h3>
-      <p class="lead">Bonnes réponses sur 150 : correctes, avec la page de preuve dans le contexte. Mêmes 20 passages pour chaque ligne, même modèle (granite4.1:8b), même juge.</p>
+      <p class="lead">Bonnes réponses sur 150 : correctes, avec la page de preuve dans le contexte. Même modèle (granite4.1:8b), même juge (qwen3.5:9b).</p>
       <ul class="bars" style="--max: 80">
-        <li title="Top-20 du reranker, sans sélection : 7 593 tokens lus, 1 appel LLM, 107 s par question">
-          <span class="label">Retrieve &amp; Rerank<small>top-20 brut, 7.6K tokens lus</small></span>
+        <li class="naive" title="Recherche dense seule, top-20 sans reranker ni sélection">
+          <span class="label">Naive RAG<small>pf 20</small></span>
+          <span class="track"><i style="--v: 45"></i></span><span class="value">45</span>
+        </li>
+        <li title="Présélection dense de 50, reclassée par le reranker, top-20 sans sélection : 7 593 tokens lus, 1 appel LLM, 107 s par question">
+          <span class="label">Retrieve &amp; Rerank<small>pf 50, top-20 brut, 7.6K tokens</small></span>
           <span class="track"><i style="--v: 72"></i></span><span class="value">72</span>
         </li>
         <li title="Grader seul, sans expansion : 4 048 tokens lus, 21 appels LLM, 161 s par question">
@@ -341,12 +390,8 @@
           <span class="label">Advanced RAG<small>+ calculatrice, 6.3K tokens lus</small></span>
           <span class="track"><i style="--v: 75"></i></span><span class="value">75</span>
         </li>
-        <li class="ref" title="Top-20 brut avec une fenêtre de 24K : 14 340 tokens lus, 1 appel LLM, 187 s par question">
-          <span class="label">Référence à 24K<small>top-20 brut, 14.3K tokens lus</small></span>
-          <span class="track"><i style="--v: 77"></i></span><span class="value">77</span>
-        </li>
       </ul>
-      <p class="takeaway">Grade &amp; Expand atteint à 12K ce que le top-20 brut atteint à 24K, en lisant 56 % de tokens en moins : deux fois moins de mémoire GPU par requête. Un écart de moins de 5 bonnes réponses reste dans le bruit du juge.</p>
+      <p class="takeaway">Le reranker est l'étage qui pèse le plus. Grade &amp; Expand atteint ensuite à 12K le niveau du top-20 brut lu avec une fenêtre de 24K (77), en lisant 56 % de tokens en moins : deux fois moins de mémoire GPU par requête.</p>
     </article>
 
     <div class="sheets-2">

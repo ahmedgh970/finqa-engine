@@ -17,18 +17,19 @@ const state = {
 
 // --- diagram geometry -----------------------------------------------------------------
 
-const ROW_Y = 112;
+const ROW_Y = 128;
 const NODE_W = 150;
-const NODE_H = 100;
+const NODE_H = 112;
 const NODES = [
-  { id: "question", x: 10, y: ROW_Y, title: "Question", sub: () => clip(docLabel() || "tous les rapports", 19) },
-  { id: "dense", x: 176, y: ROW_Y, title: "Recherche dense", sub: (s) => `BGE-M3, top ${s.reranker ? s.prefetch : s.k}` },
-  { id: "rerank", x: 342, y: ROW_Y, title: "Reranker", sub: (s) => `garde le top ${s.k}` },
-  { id: "grade", x: 508, y: ROW_Y, title: "Grader LLM", sub: (s) => `garde la note ≥ ${s.keep_threshold}` },
-  { id: "expand", x: 674, y: ROW_Y, title: "Expansion", sub: (s) => `±${s.window} chunk voisin` },
-  { id: "route", x: 840, y: ROW_Y, title: "Routage", sub: () => "une formule ?" },
-  { id: "calculate", x: 1000, y: 6, title: "Calculatrice", sub: () => "vérifiée par le code" },
-  { id: "generate", x: 1150, y: ROW_Y, title: "Génération", sub: (s) => clip(s.model, 19) },
+  // icon: the step, as in the production diagram; logo: the tool running it here.
+  { id: "question", x: 10, y: ROW_Y, icon: "i-question", title: "Question", sub: () => clip(docLabel() || "tous les rapports", 19) },
+  { id: "dense", x: 176, y: ROW_Y, icon: "i-search", logo: "qdrant", title: "Recherche dense", sub: (s) => `BGE-M3, top ${s.reranker ? s.prefetch : s.k}` },
+  { id: "rerank", x: 342, y: ROW_Y, icon: "i-sort", logo: "huggingface", title: "Reranker", sub: (s) => `garde le top ${s.k}` },
+  { id: "grade", x: 508, y: ROW_Y, icon: "i-check", logo: "ollama", title: "Grader LLM", sub: (s) => `garde la note ≥ ${s.keep_threshold}` },
+  { id: "expand", x: 674, y: ROW_Y, icon: "i-expand", title: "Expansion", sub: (s) => `±${s.window} chunk voisin` },
+  { id: "route", x: 840, y: ROW_Y, icon: "i-branch", title: "Routage", sub: () => "une formule ?" },
+  { id: "calculate", x: 1000, y: 4, icon: "i-calc", logo: "ollama", title: "Calculatrice", sub: () => "vérifiée par le code" },
+  { id: "generate", x: 1150, y: ROW_Y, icon: "i-pen", logo: "ollama", title: "Génération", sub: (s) => clip(s.model, 19) },
 ];
 const MID = ROW_Y + NODE_H / 2;
 const EDGES = [
@@ -38,11 +39,11 @@ const EDGES = [
   { id: "grade-expand", d: `M658 ${MID} H674` },
   { id: "expand-route", d: `M824 ${MID} H840` },
   { id: "route-generate", d: `M990 ${MID} H1150` },
-  { id: "route-calculate", d: `M915 ${ROW_Y} C915 70 950 56 1000 56` },
-  { id: "calculate-generate", d: `M1150 56 C1200 56 1225 80 1225 ${ROW_Y}` },
+  { id: "route-calculate", d: `M915 ${ROW_Y} C915 88 950 60 1000 60` },
+  { id: "calculate-generate", d: `M1150 60 C1200 60 1225 94 1225 ${ROW_Y}` },
 ];
 const CHAIN = ["question", "dense", "rerank", "grade", "expand", "route"];
-const TIME_Y = 254;
+const TIME_Y = ROW_Y + NODE_H + 32;
 
 // Graph node (as the API names it) -> the diagram nodes that draw it.
 const DRAWN = {
@@ -157,7 +158,7 @@ function buildRail() {
   }
   segmented($("#keep_threshold"), [0, 1, 2, 3], (v) => `≥ ${v}`, (v) => update({ keep_threshold: v }));
   segmented($("#num_ctx"), [8192, 12288, 16384, 24576], (v) => `${v / 1024}K`, (v) => update({ num_ctx: v }));
-  segmented($("#max_tokens"), [512, 1024, 2048], (v) => `${v} tokens`, (v) => update({ max_tokens: v }));
+  segmented($("#max_tokens"), [512, 1024, 2048], (v) => `${v}`, (v) => update({ max_tokens: v }));
   const models = o.models.length ? o.models : [o.defaults.model];
   put($("#model"), ...models.map((m) => el("option", { value: m, text: m })));
 
@@ -228,10 +229,12 @@ function buildDiagram() {
   for (const n of NODES) {
     const g = svg("g", { class: "node", tabindex: "0", role: "button", "data-node": n.id });
     g.append(svg("rect", { class: "box", x: n.x, y: n.y, width: NODE_W, height: NODE_H, rx: 12 }));
-    const title = svg("text", { class: "title", x: n.x + 14, y: n.y + 28 });
+    g.append(svg("use", { class: "icon", href: `#${n.icon}`, x: n.x + 14, y: n.y + 14, width: 18, height: 18 }));
+    if (n.logo) g.append(svg("image", { class: "logo", href: `/static/logos/${n.logo}.svg`, x: n.x + NODE_W - 32, y: n.y + 13, width: 18, height: 18 }));
+    const title = svg("text", { class: "title", x: n.x + 14, y: n.y + 54 });
     title.textContent = n.title;
-    const sub = svg("text", { class: "sub", x: n.x + 14, y: n.y + 47 });
-    const stat = svg("text", { class: "stat", x: n.x + 14, y: n.y + 70 });
+    const sub = svg("text", { class: "sub", x: n.x + 14, y: n.y + 72 });
+    const stat = svg("text", { class: "stat", x: n.x + 14, y: n.y + 93 });
     g.append(title, sub, stat);
     if (n.id === "grade") g.append(svg("g", { class: "cells" }));
     g.addEventListener("click", () => select(n.id, true));
@@ -256,7 +259,7 @@ function drawCells(k) {
   const gap = k > 24 ? 1 : 2;
   const w = (inner - gap * (k - 1)) / k;
   for (let i = 0; i < k; i++) {
-    g.append(svg("rect", { class: "cell", x: x + 14 + i * (w + gap), y: y + 80, width: Math.max(w, 1), height: 10, rx: 1.5, "data-i": i }));
+    g.append(svg("rect", { class: "cell", x: x + 14 + i * (w + gap), y: y + 99, width: Math.max(w, 1), height: 7, rx: 1.5, "data-i": i }));
   }
 }
 
@@ -970,9 +973,9 @@ function showPage(page) {
 function wireArchitecture() {
   for (const step of document.querySelectorAll(".arch .wf")) {
     const light = (on) => {
-      for (const call of document.querySelectorAll(`.arch .call[data-from="${step.dataset.node}"]`)) call.classList.toggle("hot", on);
+      for (const el of document.querySelectorAll(`.arch [data-from="${step.dataset.node}"]`)) el.classList.toggle("hot", on);
       for (const svc of step.dataset.calls.split(" ").filter(Boolean)) {
-        document.querySelector(`.arch .svc[data-svc="${svc}"]`)?.classList.toggle("hot", on);
+        for (const el of document.querySelectorAll(`.arch .svc[data-svc="${svc}"], .arch .bus[data-svc="${svc}"]`)) el.classList.toggle("hot", on);
       }
     };
     for (const [ev, on] of [["mouseenter", true], ["mouseleave", false], ["focus", true], ["blur", false]]) {

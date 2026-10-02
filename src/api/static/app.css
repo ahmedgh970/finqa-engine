@@ -69,6 +69,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .mode button[aria-selected="true"] { background: #e8eef7; color: var(--ink); }
 .status { justify-self: end; display: flex; align-items: center; gap: 8px; font-size: 13px; color: #c4d0e2; }
+.stack { display: flex; gap: 6px; margin-right: 14px; padding-right: 14px; border-right: 1px solid rgba(255, 255, 255, 0.15); }
+.stack img { width: 26px; height: 26px; padding: 5px; border-radius: 7px; background: #fff; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); }
 .dot.ok { background: #49c18f; }
 .dot.bad { background: #e0913a; }
@@ -80,7 +82,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* --- layout ------------------------------------------------------------------------- */
 .layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: calc(100vh - 64px); }
-.main { padding: 22px 28px 40px; display: grid; gap: 18px; align-content: start; min-width: 0; }
+.main { padding: 22px 28px 40px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-content: start; min-width: 0; }
 
 /* --- settings rail ------------------------------------------------------------------ */
 .rail {
@@ -170,7 +172,12 @@ button.ghost {
 
 /* diagram nodes */
 .node { cursor: pointer; }
-.node .box { fill: #fff; stroke: var(--rule); stroke-width: 1.2; transition: stroke 0.2s, fill 0.2s; }
+.node .box { fill: #fff; stroke: var(--rule); stroke-width: 1.2; transition: stroke 0.2s, fill 0.2s; filter: drop-shadow(0 1px 2px rgba(19, 35, 63, 0.08)); }
+.node .icon { fill: none; stroke: var(--ink-2); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.node.running .icon { stroke: var(--flow); }
+.node.done .icon { stroke: var(--ink); }
+.node.ok .icon { stroke: var(--verified); }
+.node.refused .icon { stroke: var(--reserve); }
 .node .title { font-size: 15px; font-weight: 600; fill: var(--ink); }
 .node .sub { font-size: 12px; fill: var(--ink-2); }
 .node .stat { font-size: 12.5px; font-weight: 600; fill: var(--ink-2); }
@@ -325,7 +332,11 @@ table.vars td.num { text-align: right; font-weight: 600; white-space: nowrap; }
   .topbar { grid-template-columns: 1fr; gap: 10px; padding: 12px 16px; }
   .status { justify-self: start; }
   .main { padding: 16px; }
-  .composer-row { grid-template-columns: 1fr; }
+  .composer-row { grid-template-columns: minmax(0, 1fr); }
+  .composer-side select { min-width: 0; max-width: 100%; }
+  .mode { flex-wrap: wrap; justify-content: center; border-radius: 14px; }
+  .mode button { padding: 6px 10px; font-size: 13.5px; }
+  .brand, .brand > div { min-width: 0; }
   .source summary { grid-template-columns: 24px minmax(0, 1fr) auto; }
   .source .snip { display: none; }
   .plist li { grid-template-columns: 24px 14px minmax(0, 1fr) auto; }
@@ -339,7 +350,7 @@ table.vars td.num { text-align: right; font-weight: 600; white-space: nowrap; }
 .sheet { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius-lg); padding: 18px 20px; }
 .sheet h3 { font-size: 17px; }
 .sheet .lead { font-size: 14px; color: var(--ink-2); margin-top: 4px; max-width: 75ch; }
-.sheet .takeaway { font-size: 14px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--rule-2); max-width: 80ch; }
+.sheet .takeaway { font-size: 14px; color: var(--ink-2); margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--rule-2); max-width: 80ch; }
 .sheets-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
 
 /* One series of horizontal bars: the label, the bar from a shared baseline, the value at its tip. */
@@ -382,28 +393,44 @@ table.figures tr.kept td { font-weight: 600; color: var(--verified); }
 }
 
 /* --- production architecture --------------------------------------------------------- */
-.arch-sheet { padding: 12px; overflow-x: auto; }
-.arch { width: 100%; min-width: 900px; height: auto; display: block; }
+.arch-sheet { padding: 14px; overflow-x: auto; background: #fff; }
+.arch { width: 100%; min-width: 920px; height: auto; display: block; }
 .arch text { font-family: var(--font); }
-.arch .t { font-size: 15px; font-weight: 600; fill: var(--ink); }
+.arch .t { font-size: 14.5px; font-weight: 600; fill: var(--ink); }
+.arch .t.big { font-size: 17px; }
 .arch .s { font-size: 12.5px; fill: var(--ink-2); }
+.arch .s.strong { fill: var(--ink); font-weight: 500; }
 .arch .k { font-size: 13px; font-weight: 600; fill: var(--ink-2); }
-.arch .n { font-size: 12px; font-weight: 600; fill: var(--ink-3); }
-.arch .note { font-style: italic; }
-.arch .box rect { fill: #fff; stroke: var(--rule); stroke-width: 1.2; }
-.arch .side rect { fill: var(--sheet); }
-.arch .api rect { fill: #eef2f7; stroke: var(--ink); stroke-width: 1.4; stroke-dasharray: 6 4; }
-.arch .svc rect { fill: #fff; stroke: var(--ink); stroke-width: 1.6; transition: stroke 0.15s, fill 0.15s; }
-.arch .svc.hot rect { stroke: var(--flow); stroke-width: 2.6; fill: var(--flow-soft); }
+.arch .zone rect { fill: #f1f4f8; stroke: none; }
+.arch .zone text { font-size: 12.5px; font-weight: 600; fill: var(--ink-3); }
+.arch .box rect { fill: #fff; stroke: var(--rule); stroke-width: 1; filter: drop-shadow(0 1px 1.5px rgba(19, 35, 63, 0.08)); }
+.arch .ico, .arch .wf use { fill: none; stroke: var(--ink-2); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.arch .api rect { fill: #f7f9fc; stroke: var(--ink-3); stroke-width: 1.2; stroke-dasharray: 6 5; }
+.arch .svc rect { fill: #fff; stroke: var(--rule); stroke-width: 1; filter: drop-shadow(0 1px 2px rgba(19, 35, 63, 0.1)); transition: stroke 0.15s, fill 0.15s; }
+.arch .svc.hot rect { stroke: var(--ink); stroke-width: 2; fill: #fbfcfe; }
 .arch .wf { cursor: default; }
-.arch .wf rect { fill: #fff; stroke: var(--rule); stroke-width: 1.2; transition: stroke 0.15s, fill 0.15s; }
-.arch .wf:hover rect, .arch .wf:focus-visible rect { stroke: var(--flow); stroke-width: 2; fill: var(--flow-soft); }
+.arch .wf rect { fill: #fff; stroke: var(--rule); stroke-width: 1; transition: stroke 0.15s, fill 0.15s; }
+.arch .wf:hover rect, .arch .wf:focus-visible rect { stroke: var(--ink); stroke-width: 1.6; }
 .arch .wf:focus-visible { outline: none; }
-.arch .wf .t { font-size: 14px; }
-.arch .call { fill: none; stroke: var(--g1); stroke-width: 1.6; transition: stroke 0.15s, stroke-width 0.15s; }
-.arch .call.hot { stroke: var(--flow); stroke-width: 2.8; }
+.arch .wf .num { fill: var(--ink); }
+.arch .wf .numt { font-size: 11px; font-weight: 600; fill: #fff; }
+.arch .chip { fill: #fff; stroke: var(--rule); stroke-width: 1; }
+.arch .bus, .arch .call { fill: none; stroke: var(--c); stroke-width: 2; stroke-opacity: 0.55; transition: stroke-opacity 0.15s, stroke-width 0.15s; }
+.arch .joint { fill: var(--c); fill-opacity: 0.8; }
+.arch .bus.hot, .arch .call.hot { stroke-opacity: 1; stroke-width: 3.2; }
+.arch .joint.hot { fill-opacity: 1; }
 .arch .pipe { fill: none; stroke: var(--ink-3); stroke-width: 1.6; }
 .arch .pipe.dashed { stroke-dasharray: 5 4; }
 table.map td + td, table.map th + th { text-align: left; }
 .plain { margin: 12px 0 0; padding-left: 18px; display: grid; gap: 8px; font-size: 14px; color: var(--ink-2); }
 .plain strong { color: var(--ink); font-weight: 600; }
+/* The baseline every stage is measured against. */
+.bars li.naive .track i { background: #b42318; }
+.bars .value sup { font-size: 11px; color: var(--ink-2); margin-left: 1px; }
+.sheet .footnote { font-size: 12.5px; color: var(--ink-2); margin-top: 8px; }
+
+/* Main panels sit slightly above the page. */
+.composer, .board, .inspector, .answer, .sources, .sheet {
+  box-shadow: 0 1px 2px rgba(19, 35, 63, 0.04), 0 6px 18px rgba(19, 35, 63, 0.04);
+}
+@media (max-width: 1100px) { .stack { display: none; } }
