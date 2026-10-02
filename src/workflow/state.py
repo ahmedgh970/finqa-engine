@@ -45,6 +45,7 @@ class CragState(TypedDict, total=False):
 
     # Output
     answer: str
+    truncated: bool  # generation hit max_tokens before the answer was complete
     sources: list[Chunk]
     n_dropped_to_fit: int  # passages trimmed so the prompt fits the pinned num_ctx
 

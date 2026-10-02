@@ -114,3 +114,63 @@ def test_a_failing_run_ends_with_an_error_event(monkeypatch):
         resp = client.post("/demo/run", json={"question": "q"})
     last = json.loads(resp.text.strip().splitlines()[-1][6:])
     assert last == {"type": "error", "message": "Ollama is not reachable"}
+
+
+class FakeReranker:
+    """Scores the passages in reverse, so the last dense candidate comes out first."""
+
+    def score(self, query: str, texts: list[str]) -> list[float]:
+        return [float(i) for i in range(len(texts))]
+
+
+def test_the_dense_shortlist_is_reported_before_the_reranked_top_k(monkeypatch):
+    from src.api.demo import report_dense_stage
+    from src.retrieval.reranked import RerankedRetriever
+
+    monkeypatch.setattr("src.workflow.nodes.generate", lambda prompt, config: "answer")
+    retriever = report_dense_stage(
+        RerankedRetriever(base=FakeRetriever(_chunks(5)), reranker=FakeReranker(), prefetch=5)
+    )
+    cfg = WorkflowConfig(chunks_path="unused.jsonl", collection_name="c", k=2)
+    events = list(stream_run(build_graph(retriever, cfg), "q", "D"))
+
+    dense = next(e for e in events if e.get("stage") == "dense")
+    assert [p["id"] for p in dense["passages"]] == [f"D::{i}" for i in range(5)]
+    assert dense["passages"][0]["score"] == 1.0  # the dense score, not the reranker's
+    retrieved = next(e for e in events if e.get("node") == "retrieve" and e["type"] == "node")
+    assert [p["id"] for p in retrieved["data"]["passages"]] == ["D::4", "D::3"]
+    assert events.index(dense) < events.index(retrieved)
+    assert report_dense_stage(retriever) is retriever  # wrapping twice does nothing
+
+
+def test_the_output_budget_is_a_setting():
+    served = load_workflow_config(SERVED)
+    assert RunSettings.from_config(served).max_tokens == served.llm.max_tokens
+    assert RunSettings(max_tokens=2048).config(served).llm.max_tokens == 2048
+
+
+def test_a_new_live_run_stops_the_one_before_it():
+    import time
+
+    from src.api.demo import LiveRuns
+    from src.llm import client
+
+    def slow():
+        yield {"type": "plan"}
+        for _ in range(500):  # a long node: it checks the stop signal like an LLM call
+            if client._stop.get().is_set():
+                raise client.Cancelled
+            time.sleep(0.01)
+        yield {"type": "done"}
+
+    def quick():
+        yield {"type": "done"}
+
+    runs = LiveRuns()
+    first = runs.start(slow)
+    assert first.queue.get(timeout=2) == {"type": "plan"}
+    second = runs.start(quick)
+
+    assert first.finished.is_set() and first.stop.is_set()
+    assert first.queue.get(timeout=2)["type"] == "cancelled"
+    assert second.queue.get(timeout=2) == {"type": "done"}

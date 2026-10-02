@@ -613,3 +613,53 @@ def test_a_per_share_block_cut_by_the_chunker_goes_on_in_the_next_chunk():
 )
 def test_a_verified_figure_is_found_in_the_answer_by_value(answer, figure, kept):
     assert states_figure(answer, figure) is kept
+
+
+ASSET_TURNOVER_Q = (
+    "What is Lockheed Martin's FY2020 asset turnover ratio? Asset turnover ratio is defined "
+    "as: FY2020 revenue / (average total assets between FY2019 and FY2020). Round your answer "
+    "to two decimal places. Use the balance sheet and the P&L statement."
+)
+
+
+def test_a_year_the_formula_writes_before_a_quantity_pins_that_quantity():
+    """Measured: the 2019 revenue line passed the 2019-2020 range check, 1.22 for 1.33."""
+    rows = _rows(
+        "STATEMENTS OF EARNINGS (In Millions) Total net sales, 2020 = 65,398. "
+        "Total net sales, 2019 = 59,812.",
+        "BALANCE SHEETS (In Millions) Total assets, 2020 = 50,710. Total assets, 2019 = 47,528.",
+    )
+    spec = lambda revenue_line: _spec(  # noqa: E731
+        "r / ((a19 + a20) / 2)",
+        r=("FY2020 revenue", revenue_line),
+        a19=("total assets", _line(rows, "Total assets, 2019")),
+        a20=("total assets", _line(rows, "Total assets, 2020")),
+    )
+    with pytest.raises(CalculationError, match="formula asks for revenue of \\[2020\\]"):
+        compute(spec(_line(rows, "Total net sales, 2019")), rows, ASSET_TURNOVER_Q)
+    result = compute(spec(_line(rows, "Total net sales, 2020")), rows, ASSET_TURNOVER_Q)
+    assert result.rendered(*answer_format(ASSET_TURNOVER_Q)) == "1.33"
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        (ASSET_TURNOVER_Q, {"revenue": {2020}}),
+        # A metric named in the title binds nothing: both inventories are wanted.
+        (
+            "What is the FY2019 inventory turnover ratio? Inventory turnover ratio is defined "
+            "as: (FY2019 COGS) / (average inventory between FY2018 and FY2019).",
+            {"cogs": {2019}},
+        ),
+        ("FCF here is defined as: (cash from operations - capex).", {}),
+        ("What is the FY2017 - FY2019 3 year average of capex as a % of revenue?", {}),
+        (
+            "Define unadjusted EBITDA as FY2021 unadjusted operating income + depreciation.",
+            {"operating_income": {2021}},
+        ),
+    ],
+)
+def test_only_the_formula_pins_years(question, expected):
+    from src.workflow.calculator import bound_years
+
+    assert bound_years(question) == expected

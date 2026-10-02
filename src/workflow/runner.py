@@ -126,6 +126,7 @@ def run(
                 "computed": result.computed,
                 "calc_error": result.calc_error,
                 "computed_used": result.computed_used,
+                "truncated": result.truncated,
                 "grades": result.grades,
                 "max_grade": result.max_grade,
                 "low_confidence": result.low_confidence,

@@ -295,7 +295,10 @@ def make_generate(config: WorkflowConfig):
         computed = state.get("computed")
         text = generate(build_prompt(state["question"], sources, verified=computed), config.llm)
         return {
-            "answer": text,
+            "answer": str(text),
+            # The output budget ran out before the model concluded: the answer stops
+            # mid-sentence, and says nothing about whether the model would have been right.
+            "truncated": getattr(text, "truncated", False),
             "sources": sources,
             "n_dropped_to_fit": len(selected) - len(sources),
             # A verified figure handed to the generator can still be dropped or reworded

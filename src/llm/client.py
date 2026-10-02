@@ -10,8 +10,11 @@ a bad request fails immediately since retrying can't help.
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import json
 import os
+import threading
+from collections.abc import Iterator
 from typing import TypeVar
 
 import requests
@@ -43,6 +46,32 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 # Upper bound on the auto-sized context window: a bigger KV cache than this
 # would not fit an 8 GB GPU and would spill to CPU.
 NUM_CTX_CAP = 32768
+
+# The stop signal of the run the current call belongs to, when a caller made it stoppable.
+# A context variable, so it follows the call into the threads a graph runs its nodes in.
+_stop: contextvars.ContextVar[threading.Event | None] = contextvars.ContextVar(
+    "ollama_stop", default=None
+)
+
+
+class Cancelled(Exception):
+    """The run this call belongs to was stopped; nothing should be retried or reported."""
+
+
+@contextlib.contextmanager
+def stoppable(stop: threading.Event) -> Iterator[None]:
+    """Make the calls made inside this block stop as soon as ``stop`` is set.
+
+    The call then streams from Ollama and closes the connection when the signal comes,
+    which makes Ollama abandon the generation; the next call is not made at all. Outside
+    such a block nothing changes: one request, one complete answer.
+    """
+    token = _stop.set(stop)
+    try:
+        yield
+    finally:
+        _stop.reset(token)
+
 
 # Transport-level failures worth retrying; a 4xx (bad request) is not among them.
 _TRANSIENT_ERRORS = (
@@ -77,6 +106,27 @@ def _auto_num_ctx(prompt: str, num_predict: int) -> int:
     return min(NUM_CTX_CAP, max(2048, rounded))
 
 
+class Completion(str):
+    """Generated text that also says why generation stopped.
+
+    A ``str``, so every caller keeps treating a completion as text. ``truncated`` is
+    for the caller that must know the output budget ran out before the answer did:
+    the text then ends mid-sentence, which reads like an answer that went nowhere.
+    """
+
+    done_reason: str | None = None
+
+    @property
+    def truncated(self) -> bool:
+        return self.done_reason == "length"
+
+
+def _completion(content: str, done_reason: str | None) -> Completion:
+    completion = Completion(content)
+    completion.done_reason = done_reason
+    return completion
+
+
 @retry(
     retry=retry_if_exception_type(_TRANSIENT_ERRORS),
     stop=stop_after_attempt(4),
@@ -84,7 +134,7 @@ def _auto_num_ctx(prompt: str, num_predict: int) -> int:
 )
 def generate(
     prompt: str, config: LLMConfig, schema: dict | None = None, system: str | None = None
-) -> str:
+) -> Completion:
     """Generate a completion for ``prompt`` on a local Ollama model.
 
     ``think: False`` disables the reasoning channel on thinking-capable models
@@ -98,6 +148,8 @@ def generate(
 
     ``system``, when given, is sent as a system turn before the prompt -- for models
     trained on a fixed system prompt, such as the Prometheus judge.
+
+    The text comes back as a :class:`Completion`, carrying Ollama's ``done_reason``.
     """
     num_ctx = config.num_ctx or _auto_num_ctx(prompt, config.max_tokens)
     messages = [{"role": "user", "content": prompt}]
@@ -116,14 +168,43 @@ def generate(
     }
     if schema is not None:
         payload["format"] = schema
+    stop = _stop.get()
     with _llm_span(payload) as span:
-        response = requests.post(f"{OLLAMA_URL}/api/chat", json=payload, timeout=1800)
-        response.raise_for_status()
-        body = response.json()
-        content = body.get("message", {}).get("content", "")
+        if stop is None:
+            response = requests.post(f"{OLLAMA_URL}/api/chat", json=payload, timeout=1800)
+            response.raise_for_status()
+            body = response.json()
+            content = body.get("message", {}).get("content", "")
+        else:
+            content, body = _chat_until_stopped(payload, stop)
         if span is not None:
             _record_output(span, body, content)
-    return content
+    return _completion(content, body.get("done_reason"))
+
+
+def _chat_until_stopped(payload: dict, stop: threading.Event) -> tuple[str, dict]:
+    """Stream one chat call, giving up the moment ``stop`` is set.
+
+    Returns the text and Ollama's closing message, which carries ``done_reason`` and the
+    token counts. Closing the connection is what makes Ollama stop generating.
+    """
+    if stop.is_set():
+        raise Cancelled
+    parts: list[str] = []
+    with requests.post(
+        f"{OLLAMA_URL}/api/chat", json={**payload, "stream": True}, stream=True, timeout=1800
+    ) as response:
+        response.raise_for_status()
+        for line in response.iter_lines():
+            if stop.is_set():
+                raise Cancelled
+            if not line:
+                continue
+            message = json.loads(line)
+            parts.append(message.get("message", {}).get("content", ""))
+            if message.get("done"):
+                return "".join(parts), message
+    return "".join(parts), {}
 
 
 def _llm_span(payload: dict):

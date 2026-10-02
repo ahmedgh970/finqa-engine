@@ -1,0 +1,25 @@
+# The bottom rung of the ladder: dense retrieval alone, no reranker, no node switched on.
+#
+# Same corpus, depth, generator and pinned window as the other 12K rows, so the step to
+# grade_1024.yaml's retrieval (reranked top-20) measures the cross-encoder alone. The
+# dense search runs live -- there is no materialised dense top-20 to replay -- and is
+# deterministic, so a rerun reads the same passages.
+#
+#   uv run python -m src.workflow.runner --config configs/workflow/naive_dense_1024.yaml
+name: naive
+chunks_path: data/processed/docling/chunked/hybrid/chunks_1024.jsonl
+collection_name: docling_hybrid_1024_bge-m3
+retriever: dense
+doc_scoped: true
+k: 20
+grading:
+  enabled: false
+expansion:
+  enabled: false
+calculator:
+  enabled: false
+llm:
+  model: ollama_chat/granite4.1:8b
+  temperature: 0.0
+  max_tokens: 1024
+  num_ctx: 12288

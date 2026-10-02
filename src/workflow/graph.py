@@ -50,6 +50,7 @@ class WorkflowAnswer:
     computed: str | None = None  # the verified figure, None when the tool declined
     calc_error: str | None = None  # why it declined
     computed_used: bool = False  # whether the figure survived into the answer
+    truncated: bool = False  # the answer hit max_tokens before it was complete
     grades: list[int] = field(default_factory=list)
     max_grade: int | None = None
     low_confidence: bool = False
@@ -125,6 +126,7 @@ def run_graph(graph, question: str, doc_id: str | None = None) -> WorkflowAnswer
         computed=state.get("computed"),
         calc_error=state.get("calc_error"),
         computed_used=state.get("computed_used", False),
+        truncated=state.get("truncated", False),
         grades=state.get("grades", []),
         max_grade=state.get("max_grade"),
         low_confidence=state.get("low_confidence", False),

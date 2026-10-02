@@ -240,6 +240,47 @@ def line_items_in(question: str) -> set[str]:
     return {name for name, pattern in _LINE_ITEM_PATTERNS if pattern.search(question)}
 
 
+# Where a question defines its formula: "ROA is defined as: ...", "Define net working
+# capital as ...". Only there does a year written before a quantity fix that quantity's
+# year -- in the question's own title, "FY2019 inventory turnover ratio" names a metric.
+_DEFINITION = re.compile(r"\bdefined? (?:[^.:?]{0,80}? )?as\b:?|\bformula\b", re.I)
+# A year, then the words that follow it up to the next symbol or figure.
+_YEAR_THEN_WORDS = re.compile(
+    r"(?<!\d)(?:fy\s?)?(19[89]\d|20[0-4]\d)(?!\d)\s+([a-z][a-z&'-]*(?:\s+[a-z][a-z&'-]*){0,3})",
+    re.I,
+)
+
+
+def _item_at_start(text: str) -> str | None:
+    for name, pattern in _LINE_ITEM_PATTERNS:
+        found = pattern.search(text)
+        if found and found.start() == 0:
+            return name
+    return None
+
+
+def bound_years(question: str) -> dict[str, set[int]]:
+    """Line items the question's formula pins to a year: "FY2020 revenue / (...)".
+
+    A year binds the line item written right after it, or after one qualifier
+    ("FY2021 unadjusted operating income"); anything else between them -- a figure, a
+    second year, "3 year average of" -- binds nothing. An average "between FY2019 and
+    FY2020" pins no year either: both are wanted.
+    """
+    definition = _DEFINITION.search(question)
+    if definition is None:
+        return {}
+    bound: dict[str, set[int]] = {}
+    for found in _YEAR_THEN_WORDS.finditer(question[definition.end() :]):
+        words = found.group(2).split()
+        for start in (0, 1):
+            item = _item_at_start(" ".join(words[start:]))
+            if item:
+                bound.setdefault(item, set()).add(int(found.group(1)))
+                break
+    return bound
+
+
 def answer_format(question: str) -> tuple[int | None, bool]:
     """The rounding and the percent the question asks for, read off its wording."""
     places = None
@@ -457,6 +498,15 @@ def check_row(row: Row, question: str | None) -> None:
     if asked and not shown & set(range(min(asked), max(asked) + 1)):
         raise CalculationError(
             f"L{row.number}: {sorted(shown)} is not a year the question asks for"
+        )
+    # The range is not enough when the formula dates a quantity: "FY2020 revenue /
+    # (average total assets between FY2019 and FY2020)" covers 2019, yet its revenue is
+    # 2020's. Measured: the 2019 revenue line was pointed at and a 1.22 accepted for 1.33.
+    pinned = bound_years(question or "").get(line_item(row.label) or "")
+    if pinned and shown and not shown & pinned:
+        raise CalculationError(
+            f"L{row.number}: {sorted(shown)}, but the formula asks for {line_item(row.label)} "
+            f"of {sorted(pinned)}"
         )
 
 
