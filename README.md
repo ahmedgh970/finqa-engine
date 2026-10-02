@@ -38,7 +38,10 @@ flowchart LR
     RR -.->|selection off| P
     RR --> G[Grade · 0-3 per passage · LLM]
     G --> E[Expand · ±n neighbouring chunks]
-    E --> P[Grounded prompt · trimmed to num_ctx]
+    E --> RT{Route · formula?}
+    RT -->|yes| C[Calculate · LLM points to rows, code checks and computes]
+    C -->|verified figure| P
+    RT -->|no| P[Grounded prompt · trimmed to num_ctx]
     P --> LLM[Generate · Ollama granite4.1:8b]
     LLM --> API
     API -->|answer + sources| UI
@@ -50,11 +53,16 @@ from Qdrant, reranking with a cross-encoder, then generating a grounded answer
 with a local Ollama model. Between the two, grading and expansion are switches:
 the grader scores each passage and keeps what holds part of the answer, the
 expansion reads each survivor with the chunks that surround it in its filing, so
-a statement cut across chunks reaches the prompt whole. With both off the graph
-reduces to retrieve → rerank → generate, the baseline every row is measured
-against. See [ADR 0001](docs/adr/0001-retrieval-strategy.md) (retrieval),
-[ADR 0002](docs/adr/0002-generation-model.md) (generation) and
-[ADR 0004](docs/adr/0004-crag-workflow-evidence-grid.md) (workflow rows).
+a statement cut across chunks reaches the prompt whole. A question that states its
+own formula is routed to the calculator: the model only names the expression and
+points to table rows, the code reads, checks and computes, and a verified figure is
+handed to the generator. With every switch off the graph reduces to retrieve → rerank
+→ generate, the baseline every row is measured against. See
+[ADR 0001](docs/adr/0001-retrieval-strategy.md) (retrieval),
+[ADR 0002](docs/adr/0002-generation-model.md) (generation),
+[ADR 0004](docs/adr/0004-crag-workflow-evidence-grid.md) (workflow rows),
+[ADR 0005](docs/adr/0005-context-selection-expansion.md) (context selection) and
+[ADR 0006](docs/adr/0006-verified-calculator.md) (calculator).
 
 ---
 
@@ -224,12 +232,14 @@ fewer than about 5 good jobs is within the judges' disagreement and should not b
 as a difference. *Evidence* is the share of questions whose context holds every figure
 the gold answer is built from. Full grid, per-question transitions and the judge
 validation are in [ADR 0004](docs/adr/0004-crag-workflow-evidence-grid.md); the
-selection rows are [ADR 0005](docs/adr/0005-context-selection-expansion.md).
+selection rows are [ADR 0005](docs/adr/0005-context-selection-expansion.md), the
+calculator row [ADR 0006](docs/adr/0006-verified-calculator.md).
 
 | Workflow row | `num_ctx` | Tokens read | Good job | Unverified | Hallucinating | Need help | Don't know | Evidence | Latency / Q | LLM calls / Q |
 |---|---|---|---|---|---|---|---|---|---|---|
 | top-20, no selection | 24576 | 14340 | **77** | 13 | 16 | 23 | 21 | 56.1% | 187 s | 1 |
 | **grade ≥ 2 + window ±1** | **12288** | **6314** | **74** | 18 | 18 | 15 | 25 | **56.8%** | 136 s | 21 |
+| **+ verified calculator** | **12288** | **6314** | **75** | 18 | 18 | 14 | 25 | **56.8%** | n/a¹ | 21.2² |
 | top-20, no selection | 12288 | 7593 | 72 | 15 | 22 | 17 | 24 | 43.9% | 107 s | 1 |
 | grade ≥ 2, no window | 12288 | 4048 | 68 | 15 | 23 | 18 | 26 | 44.6% | 161 s | 21 |
 
@@ -241,9 +251,23 @@ statement cut across two chunks, of which only one was kept. The row ends within
 judges' noise of a 24K window while reading 56% fewer tokens, which is what a context
 window costs in VRAM when serving.
 
+¹ The calculator row ran on a GPU throttled by its power limit, so its latency is not
+comparable; measured live on one routed question, the calculator node takes 42 s.
+² One more call on the 30 questions routed to the calculator.
+
 The remaining failures are no longer about retrieval depth. On the 22 questions whose
 wording carries its own formula, 12 now have every input in context, and 8 of those are
 answered correctly: what is left is arithmetic, not search.
+
+Key finding: **the calculator never accepts a wrong figure, and that is its value.**
+Routed on 30 questions, it accepted 11 computations, all correct, and refused the rest
+— a missing statement, an undated row, a line that names another quantity. The 120
+questions it is not routed to keep byte-identical answers. Good jobs move from 74 to
+75, within the judge's noise: granite already computes correctly when it has the right
+rows. What the calculator adds is verifiability — a figure checked by code, with the
+rows and pages it was read from. Its rules were tuned on the 30 routed questions; a
+false accept found later with another model became one more general rule, replayed on
+every past extraction without a single change.
 
 ---
 
