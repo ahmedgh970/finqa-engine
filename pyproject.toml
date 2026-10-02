@@ -44,7 +44,6 @@ dependencies = [
 [project.optional-dependencies]
 # Offline PDF parsing stack (GPU). Not needed by the deployable serving app.
 ingestion = [
-    "pymupdf>=1.24.0",
     "docling>=2.0.0",
     "unstructured[pdf]>=0.21.5",
     "onnxruntime-gpu==1.26.0",
