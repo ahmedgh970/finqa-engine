@@ -23,6 +23,7 @@
       <button role="tab" id="mode-live" aria-selected="true">En direct</button>
       <button role="tab" id="mode-replay" aria-selected="false">Run enregistré</button>
       <button role="tab" id="mode-results" aria-selected="false">Résultats mesurés</button>
+      <button role="tab" id="mode-prod" aria-selected="false">En production</button>
     </div>
     <div class="status">
       <span id="status-dot" class="dot"></span><span id="status-text">Connexion…</span>
@@ -159,6 +160,161 @@
       </section>
     </main>
   </div>
+
+  <section id="prod" class="results" hidden aria-label="Architecture de production">
+    <header class="results-head">
+      <h2>En production</h2>
+      <p>Le même workflow, servi pour de vrai : l'API ne fait plus que l'orchestration, chaque modèle devient un service qui se dimensionne seul. Survolez une étape du workflow pour voir le service qu'elle appelle.</p>
+    </header>
+
+    <article class="sheet arch-sheet">
+      <svg class="arch" viewBox="0 0 1180 620" role="img" aria-label="Architecture cible : gateway, API FastAPI avec le workflow LangGraph, vLLM, TEI, Qdrant, observabilité, CI et ingestion">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#7b8aa0"/>
+          </marker>
+        </defs>
+
+        <!-- entry -->
+        <g class="box"><rect x="20" y="30" width="200" height="64" rx="10"/>
+          <text class="t" x="36" y="56">Utilisateurs</text><text class="s" x="36" y="76">UI, applications métier</text></g>
+        <g class="box"><rect x="20" y="124" width="200" height="72" rx="10"/>
+          <text class="t" x="36" y="150">Gateway</text><text class="s" x="36" y="170">SSO, quotas, TLS</text><text class="s" x="36" y="186">filtre client imposé</text></g>
+        <path class="pipe" d="M120 94 V124" marker-end="url(#arrow)"/>
+        <path class="pipe" d="M220 160 H250" marker-end="url(#arrow)"/>
+
+        <!-- API with the workflow inside -->
+        <g class="api"><rect x="250" y="20" width="560" height="430" rx="14"/>
+          <text class="t" x="270" y="48">API FastAPI</text>
+          <text class="s" x="270" y="68">sans état, N réplicas, conteneurs CPU</text>
+          <text class="k" x="270" y="96">Workflow LangGraph, inchangé</text></g>
+        <g class="wf" data-node="retrieve" data-calls="tei qdrant" tabindex="0">
+          <rect x="280" y="108" width="500" height="34" rx="8"/>
+          <text class="n" x="294" y="130">1</text>
+          <text class="t" x="314" y="130">Recherche dense</text>
+          <text class="s" x="470" y="130">question → vecteur (TEI) → candidats (Qdrant)</text>
+        </g>
+        <g class="wf" data-node="rerank" data-calls="tei" tabindex="0">
+          <rect x="280" y="152" width="500" height="34" rx="8"/>
+          <text class="n" x="294" y="174">2</text>
+          <text class="t" x="314" y="174">Reranker</text>
+          <text class="s" x="470" y="174">50 candidats rescorés (TEI /rerank)</text>
+        </g>
+        <g class="wf" data-node="grade" data-calls="vllm" tabindex="0">
+          <rect x="280" y="196" width="500" height="34" rx="8"/>
+          <text class="n" x="294" y="218">3</text>
+          <text class="t" x="314" y="218">Grader LLM</text>
+          <text class="s" x="470" y="218">20 appels en parallèle (vLLM)</text>
+        </g>
+        <g class="wf" data-node="expand" data-calls="qdrant" tabindex="0">
+          <rect x="280" y="240" width="500" height="34" rx="8"/>
+          <text class="n" x="294" y="262">4</text>
+          <text class="t" x="314" y="262">Expansion</text>
+          <text class="s" x="470" y="262">chunks voisins lus dans Qdrant</text>
+        </g>
+        <g class="wf" data-node="route" data-calls="" tabindex="0">
+          <rect x="280" y="284" width="500" height="34" rx="8"/>
+          <text class="n" x="294" y="306">5</text>
+          <text class="t" x="314" y="306">Routage</text>
+          <text class="s" x="470" y="306">code, aucun modèle</text>
+        </g>
+        <g class="wf" data-node="calculate" data-calls="vllm" tabindex="0">
+          <rect x="280" y="328" width="500" height="34" rx="8"/>
+          <text class="n" x="294" y="350">6</text>
+          <text class="t" x="314" y="350">Calculatrice</text>
+          <text class="s" x="470" y="350">formule (vLLM), calcul en Decimal</text>
+        </g>
+        <g class="wf" data-node="generate" data-calls="vllm" tabindex="0">
+          <rect x="280" y="372" width="500" height="34" rx="8"/>
+          <text class="n" x="294" y="394">7</text>
+          <text class="t" x="314" y="394">Génération</text>
+          <text class="s" x="470" y="394">réponse + sources (vLLM, streamée)</text>
+        </g>
+
+        <!-- model services -->
+        <path class="call" data-from="retrieve" d="M780 125 C835 125 830 222 880 222"/>
+        <path class="call" data-from="retrieve" d="M780 125 C845 125 825 352 880 352"/>
+        <path class="call" data-from="rerank" d="M780 169 C830 169 830 252 880 252"/>
+        <path class="call" data-from="grade" d="M780 213 C835 213 830 82 880 82"/>
+        <path class="call" data-from="expand" d="M780 257 C840 257 825 392 880 392"/>
+        <path class="call" data-from="calculate" d="M780 345 C845 345 825 112 880 112"/>
+        <path class="call" data-from="generate" d="M780 389 C850 389 820 142 880 142"/>
+        <g class="svc" data-svc="vllm"><rect x="880" y="30" width="280" height="140" rx="12"/>
+          <text class="t" x="898" y="58">vLLM</text>
+          <text class="s" x="898" y="80">LLM : granite4.1:8b</text>
+          <text class="s" x="898" y="100">batching continu, PagedAttention</text>
+          <text class="s" x="898" y="120">sorties JSON guidées par schéma</text>
+          <text class="s" x="898" y="152">GPU 24 Go (L4, A10G)</text></g>
+        <g class="svc" data-svc="tei"><rect x="880" y="190" width="280" height="110" rx="12"/>
+          <text class="t" x="898" y="218">TEI</text>
+          <text class="s" x="898" y="240">BGE-M3 : /embed</text>
+          <text class="s" x="898" y="260">bge-reranker : /rerank</text>
+          <text class="s" x="898" y="284">petit GPU ou CPU</text></g>
+        <g class="svc" data-svc="qdrant"><rect x="880" y="320" width="280" height="120" rx="12"/>
+          <text class="t" x="898" y="348">Qdrant</text>
+          <text class="s" x="898" y="370">vecteurs + métadonnées</text>
+          <text class="s" x="898" y="390">filtre par client et par rapport</text>
+          <text class="s" x="898" y="414">alias : réindexer sans coupure</text></g>
+
+        <!-- observability & delivery -->
+        <g class="box side"><rect x="20" y="230" width="200" height="120" rx="10"/>
+          <text class="t" x="36" y="256">Observabilité</text>
+          <text class="s" x="36" y="278">OpenTelemetry → Langfuse :</text>
+          <text class="s" x="36" y="296">traces, prompts, tokens</text>
+          <text class="s" x="36" y="318">Prometheus + Grafana :</text>
+          <text class="s" x="36" y="336">latence p95, GPU, refus</text></g>
+        <path class="pipe dashed" d="M250 290 H220" marker-end="url(#arrow)"/>
+        <g class="box side"><rect x="20" y="370" width="200" height="80" rx="10"/>
+          <text class="t" x="36" y="396">CI/CD</text>
+          <text class="s" x="36" y="418">tests + éval rejouée</text>
+          <text class="s" x="36" y="436">canary si pas de baisse</text></g>
+        <path class="pipe" d="M220 410 H250" marker-end="url(#arrow)"/>
+
+        <!-- batch ingestion -->
+        <text class="k" x="250" y="500">Ingestion en batch, à l'arrivée d'un rapport</text>
+        <g class="box"><rect x="250" y="516" width="190" height="64" rx="10"/>
+          <text class="t" x="266" y="542">Stockage objet</text><text class="s" x="266" y="562">rapports PDF (S3)</text></g>
+        <g class="box"><rect x="470" y="516" width="190" height="64" rx="10"/>
+          <text class="t" x="486" y="542">Worker Docling</text><text class="s" x="486" y="562">parse + chunks (GPU)</text></g>
+        <g class="box"><rect x="690" y="516" width="160" height="64" rx="10"/>
+          <text class="t" x="706" y="542">TEI</text><text class="s" x="706" y="562">embeddings en lot</text></g>
+        <g class="box"><rect x="880" y="516" width="280" height="64" rx="10"/>
+          <text class="t" x="898" y="542">Upsert Qdrant</text><text class="s" x="898" y="562">ids déterministes, idempotent</text></g>
+        <path class="pipe" d="M440 548 H470" marker-end="url(#arrow)"/>
+        <path class="pipe" d="M660 548 H690" marker-end="url(#arrow)"/>
+        <path class="pipe" d="M850 548 H880" marker-end="url(#arrow)"/>
+        <path class="pipe" d="M1020 516 V440" marker-end="url(#arrow)"/>
+      </svg>
+    </article>
+
+    <div class="sheets-2">
+      <article class="sheet">
+        <h3>De la démo à la production</h3>
+        <table class="figures map">
+          <thead><tr><th>Aujourd'hui (démo)</th><th>En production</th></tr></thead>
+          <tbody>
+            <tr><td>Ollama, un utilisateur</td><td>vLLM, requêtes simultanées</td></tr>
+            <tr><td>Embedder et reranker dans l'API</td><td>TEI, service à part</td></tr>
+            <tr><td>Grading séquentiel (20 appels)</td><td>20 appels en parallèle sur vLLM</td></tr>
+            <tr><td>Expansion lue dans un fichier JSONL</td><td>voisins lus dans Qdrant</td></tr>
+            <tr><td>Phoenix en local</td><td>Langfuse + Prometheus / Grafana</td></tr>
+            <tr><td>make demo, GPU laptop 8 Go</td><td>VM GPU (PME) ou Kubernetes (grand groupe)</td></tr>
+            <tr><td>pas d'authentification</td><td>gateway SSO, filtre client côté serveur</td></tr>
+          </tbody>
+        </table>
+      </article>
+      <article class="sheet">
+        <h3>Pourquoi ce découpage</h3>
+        <ul class="plain">
+          <li><strong>Chaque brique se dimensionne seule</strong> : plus d'utilisateurs, on ajoute des réplicas d'API ; plus de génération, des GPU vLLM.</li>
+          <li><strong>L'API reste sans GPU et sans état</strong> : elle se déploie et se remplace comme n'importe quel service web.</li>
+          <li><strong>Remplacer une brique ne touche pas les autres</strong> : un autre modèle, c'est une ligne de config ; un autre embedder, une réindexation.</li>
+          <li><strong>La qualité est surveillée comme la latence</strong> : la CI rejoue le golden set et bloque un changement qui fait baisser les bonnes réponses.</li>
+          <li><strong>Les données ne sortent pas</strong> : modèles open-weight auto-hébergés, chaque réponse cite ses sources.</li>
+        </ul>
+      </article>
+    </div>
+  </section>
 
   <section id="results" class="results" hidden aria-label="Résultats mesurés">
     <header class="results-head">

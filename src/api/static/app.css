@@ -380,3 +380,30 @@ table.figures tr.kept td { font-weight: 600; color: var(--verified); }
   .results { padding: 16px; }
   .bars li { grid-template-columns: 120px minmax(0, 1fr) 48px; }
 }
+
+/* --- production architecture --------------------------------------------------------- */
+.arch-sheet { padding: 12px; overflow-x: auto; }
+.arch { width: 100%; min-width: 900px; height: auto; display: block; }
+.arch text { font-family: var(--font); }
+.arch .t { font-size: 15px; font-weight: 600; fill: var(--ink); }
+.arch .s { font-size: 12.5px; fill: var(--ink-2); }
+.arch .k { font-size: 13px; font-weight: 600; fill: var(--ink-2); }
+.arch .n { font-size: 12px; font-weight: 600; fill: var(--ink-3); }
+.arch .note { font-style: italic; }
+.arch .box rect { fill: #fff; stroke: var(--rule); stroke-width: 1.2; }
+.arch .side rect { fill: var(--sheet); }
+.arch .api rect { fill: #eef2f7; stroke: var(--ink); stroke-width: 1.4; stroke-dasharray: 6 4; }
+.arch .svc rect { fill: #fff; stroke: var(--ink); stroke-width: 1.6; transition: stroke 0.15s, fill 0.15s; }
+.arch .svc.hot rect { stroke: var(--flow); stroke-width: 2.6; fill: var(--flow-soft); }
+.arch .wf { cursor: default; }
+.arch .wf rect { fill: #fff; stroke: var(--rule); stroke-width: 1.2; transition: stroke 0.15s, fill 0.15s; }
+.arch .wf:hover rect, .arch .wf:focus-visible rect { stroke: var(--flow); stroke-width: 2; fill: var(--flow-soft); }
+.arch .wf:focus-visible { outline: none; }
+.arch .wf .t { font-size: 14px; }
+.arch .call { fill: none; stroke: var(--g1); stroke-width: 1.6; transition: stroke 0.15s, stroke-width 0.15s; }
+.arch .call.hot { stroke: var(--flow); stroke-width: 2.8; }
+.arch .pipe { fill: none; stroke: var(--ink-3); stroke-width: 1.6; }
+.arch .pipe.dashed { stroke-dasharray: 5 4; }
+table.map td + td, table.map th + th { text-align: left; }
+.plain { margin: 12px 0 0; padding-left: 18px; display: grid; gap: 8px; font-size: 14px; color: var(--ink-2); }
+.plain strong { color: var(--ink); font-weight: 600; }

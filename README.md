@@ -344,7 +344,11 @@ reranker, prefetch and k, grader threshold and floor, expansion window, calculat
 model, context window, answer length — so a configuration is changed per question
 instead of per file. One question runs at a time: stopping it, or asking another,
 abandons the LLM call in progress rather than letting it finish unseen. Picking a FinanceBench question puts the expected
-answer next to the generated one.
+answer next to the generated one. Two more tabs carry the argument: *Measured
+results* lays out what each stage was kept for, from the ADRs, and *In production*
+draws the same workflow served for real — FastAPI orchestrating vLLM, TEI and Qdrant,
+with tracing, an evaluation gate in CI and batch ingestion — each step linked to the
+service it calls.
 
 *Recorded run* replays a question of the reference row (grade ≥ 2, window ±1,
 calculator, `granite4.1:8b`, 12K) from the files the benchmark wrote, with the verdict

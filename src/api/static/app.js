@@ -951,19 +951,38 @@ function pickExample(e) {
 
 // --- modes & boot ---------------------------------------------------------------------
 
-// The results page sits beside the demo rather than replacing a mode: a run in progress
-// keeps going while it is open and is still there on the way back.
-function showResults(on) {
-  $(".layout").hidden = on;
-  $("#results").hidden = !on;
-  $("#mode-results").setAttribute("aria-selected", String(on));
-  $("#mode-live").setAttribute("aria-selected", String(!on && state.mode === "live"));
-  $("#mode-replay").setAttribute("aria-selected", String(!on && state.mode === "replay"));
-  if (on) window.scrollTo(0, 0);
+// The results and production pages sit beside the demo rather than replacing a mode: a
+// run in progress keeps going while one is open and is still there on the way back.
+const PAGES = { results: "#results", prod: "#prod" };
+
+function showPage(page) {
+  $(".layout").hidden = page != null;
+  for (const [name, sel] of Object.entries(PAGES)) {
+    $(sel).hidden = name !== page;
+    $(`#mode-${name}`).setAttribute("aria-selected", String(name === page));
+  }
+  $("#mode-live").setAttribute("aria-selected", String(page == null && state.mode === "live"));
+  $("#mode-replay").setAttribute("aria-selected", String(page == null && state.mode === "replay"));
+  if (page) window.scrollTo(0, 0);
+}
+
+// Hovering a workflow step lights the calls it makes and the services they reach.
+function wireArchitecture() {
+  for (const step of document.querySelectorAll(".arch .wf")) {
+    const light = (on) => {
+      for (const call of document.querySelectorAll(`.arch .call[data-from="${step.dataset.node}"]`)) call.classList.toggle("hot", on);
+      for (const svc of step.dataset.calls.split(" ").filter(Boolean)) {
+        document.querySelector(`.arch .svc[data-svc="${svc}"]`)?.classList.toggle("hot", on);
+      }
+    };
+    for (const [ev, on] of [["mouseenter", true], ["mouseleave", false], ["focus", true], ["blur", false]]) {
+      step.addEventListener(ev, () => light(on));
+    }
+  }
 }
 
 function setMode(mode) {
-  showResults(false);
+  showPage(null);
   if (state.run && !state.run.finished) return;
   state.mode = mode;
   $("#mode-live").setAttribute("aria-selected", String(mode === "live"));
@@ -1019,7 +1038,9 @@ async function boot() {
 
   $("#mode-live").addEventListener("click", () => setMode("live"));
   $("#mode-replay").addEventListener("click", () => setMode("replay"));
-  $("#mode-results").addEventListener("click", () => showResults(true));
+  $("#mode-results").addEventListener("click", () => showPage("results"));
+  $("#mode-prod").addEventListener("click", () => showPage("prod"));
+  wireArchitecture();
   $("#run").addEventListener("click", run);
   $("#question").addEventListener("input", () => {
     updateRunButton();
